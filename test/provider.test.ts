@@ -53,6 +53,13 @@ describe('language model provider', () => {
     const provider = createProvider()
     const token = new CancellationTokenSource()
 
+    await expect(provider.completeText(
+      model(),
+      'hello',
+      20,
+      token.token,
+    )).rejects.toMatchObject({ code: 'NoPermissions' })
+
     await expect(provider.provideLanguageModelChatResponse(
       model(),
       [],
@@ -103,6 +110,39 @@ describe('language model provider', () => {
     expect(report.mock.calls[1]?.[0]).toEqual(new LanguageModelThinkingPart('thinking'))
     expect(report.mock.calls[2]?.[0]).toEqual(new LanguageModelToolCallPart('call', 'lookup', { q: 'x' }))
     expect(vscodeMock.output.appendLine).toHaveBeenCalledWith('[usage] model-a: {"output_tokens":3}')
+  })
+
+  it('completes bounded internal text requests without using the chat selection', async () => {
+    const provider = createProvider('secret')
+    clientMocks.streamResponse.mockImplementation(async (_body: unknown, callbacks: StreamCallbacks) => {
+      callbacks.onText('feat: ')
+      callbacks.onText('add generator')
+      callbacks.onUsage?.({ output_tokens: 4 })
+    })
+
+    await expect(provider.completeText(
+      { ...model(), maxOutputTokens: 1000 },
+      'Generate a commit message.',
+      512,
+      new CancellationTokenSource().token,
+    )).resolves.toBe('feat: add generator')
+
+    expect(clientMocks.streamResponse).toHaveBeenCalledWith(
+      {
+        model: 'model-a',
+        input: [{
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Generate a commit message.' }],
+        }],
+        stream: true,
+        max_output_tokens: 512,
+      },
+      expect.any(Object),
+      expect.any(AbortSignal),
+    )
+    expect(vscodeMock.output.appendLine).toHaveBeenCalledWith(
+      '[usage] model-a (commit message): {"output_tokens":4}',
+    )
   })
 
   it('maps HTTP errors and suppresses errors after cancellation', async () => {
@@ -220,6 +260,24 @@ describe('language model provider', () => {
       'hello',
       new CancellationTokenSource().token,
     )).resolves.toBeGreaterThan(0)
+  })
+
+  it('finishes an interactive refresh when configuration occurs during onboarding', async () => {
+    const provider = createProvider()
+    window.showInformationMessage.mockResolvedValueOnce('Configure Connection')
+    window.showInputBox
+      .mockResolvedValueOnce('http://new-proxy/')
+      .mockResolvedValueOnce('')
+      .mockResolvedValueOnce('entered-key')
+    clientMocks.discover.mockResolvedValueOnce(discovery())
+
+    await expect(provider.provideLanguageModelChatInformation(
+      { silent: false },
+      new CancellationTokenSource().token,
+    )).resolves.toHaveLength(1)
+
+    expect(clientMocks.discover).toHaveBeenCalledTimes(1)
+    expect(vscodeMock.secrets.get('cliproxyapi.apiKey')).toBe('entered-key')
   })
 
   it('does nothing when connection configuration is cancelled', async () => {

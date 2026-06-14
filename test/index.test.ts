@@ -1,5 +1,6 @@
 import type { ExtensionContext } from 'vscode'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CommitMessageService } from '../src/commit-message'
 import { activate, deactivate } from '../src/index'
 import { CLIProxyLanguageModelProvider } from '../src/provider'
 import {
@@ -20,20 +21,26 @@ describe('extension activation', () => {
     const configure = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'configure').mockResolvedValue()
     const importConfig = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'importConfig').mockResolvedValue()
     const forceRefresh = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'forceRefresh').mockResolvedValue([])
+    const generateCommitMessage = vi.spyOn(CommitMessageService.prototype, 'generate').mockResolvedValue()
+    const selectCommitMessageModel = vi.spyOn(CommitMessageService.prototype, 'selectModel').mockResolvedValue(undefined)
     const context = extensionContext()
 
     expect(activate(context)).toBeUndefined()
     expect(vscodeMock.registeredProviders[0]).toMatchObject({ vendor: 'cliproxyapi' })
-    expect(vscodeMock.commandHandlers.size).toBe(6)
-    expect(context.subscriptions).toHaveLength(9)
+    expect(vscodeMock.commandHandlers.size).toBe(8)
+    expect(context.subscriptions).toHaveLength(11)
     expect(initialize).toHaveBeenCalledTimes(1)
 
     await commands.executeCommand('modelProvider.configure')
     await commands.executeCommand('modelProvider.importConfig')
     await commands.executeCommand('modelProvider.refresh')
+    await commands.executeCommand('modelProvider.generateCommitMessage')
+    await commands.executeCommand('modelProvider.selectCommitMessageModel')
     expect(configure).toHaveBeenCalled()
     expect(importConfig).toHaveBeenCalled()
     expect(forceRefresh).toHaveBeenCalledWith(true)
+    expect(generateCommitMessage).toHaveBeenCalled()
+    expect(selectCommitMessageModel).toHaveBeenCalled()
     expect(window.showInformationMessage).toHaveBeenCalledWith('CLIProxyAPI exposed 0 chat models.')
   })
 

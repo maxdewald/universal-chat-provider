@@ -45,6 +45,22 @@ export function buildRequest(
   return request
 }
 
+export function buildTextRequest(
+  model: ProviderModel,
+  prompt: string,
+  maxOutputTokens: number,
+): Record<string, unknown> {
+  return {
+    model: model.proxyModelId,
+    input: [{
+      role: 'user',
+      content: [{ type: 'input_text', text: prompt }],
+    }],
+    stream: true,
+    max_output_tokens: Math.min(model.maxOutputTokens, maxOutputTokens),
+  }
+}
+
 export function convertMessage(message: LanguageModelChatRequestMessage): Record<string, unknown>[] {
   const role = message.role === LanguageModelChatMessageRole.Assistant ? 'assistant' : 'user'
   const content: Record<string, unknown>[] = []

@@ -37,6 +37,7 @@
   },
   "enabledApiProposals": [
     "chatProvider",
+    "contribSourceControlInputBoxMenu",
     "languageModelThinkingPart"
   ],
   "activationEvents": [
@@ -67,6 +68,15 @@
         "title": "CLIProxyAPI: Refresh Models"
       },
       {
+        "command": "modelProvider.generateCommitMessage",
+        "title": "CLIProxyAPI: Generate Commit Message",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "modelProvider.selectCommitMessageModel",
+        "title": "CLIProxyAPI: Select Commit Message Model"
+      },
+      {
         "command": "modelProvider.clearCredentials",
         "title": "CLIProxyAPI: Clear Stored API Key"
       },
@@ -75,6 +85,14 @@
         "title": "CLIProxyAPI: Show Logs"
       }
     ],
+    "menus": {
+      "scm/inputBox": [
+        {
+          "command": "modelProvider.generateCommitMessage",
+          "when": "scmProvider == git"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "CLIProxyAPI Model Provider",
@@ -99,6 +117,19 @@
           "default": 16384,
           "minimum": 1024,
           "description": "Fallback output-token limit when CLIProxyAPI provides no model-specific value."
+        },
+        "modelProvider.commitMessage.model": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models."
+        },
+        "modelProvider.commitMessage.instructions": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "editPresentation": "multilineText",
+          "description": "Optional commit-message instructions. When empty, concise Conventional Commits are generated; when set, these instructions replace that style."
         }
       }
     }
@@ -110,10 +141,11 @@
     "generate": "vscode-ext-gen --output src/generated/meta.ts",
     "vscode:dts": "dts main && dts dev",
     "lint": "eslint .",
-    "test": "vitest run",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest",
+    "test": "vitest run --project test:unit",
+    "test:e2e": "vitest run --project test:e2e",
+    "test:unit": "vitest run --project test:unit",
+    "test:coverage": "vitest run --project test:unit --coverage",
+    "test:watch": "vitest --project test:unit",
     "typecheck": "tsc --noEmit",
     "check": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "vscode:prepublish": "pnpm build",

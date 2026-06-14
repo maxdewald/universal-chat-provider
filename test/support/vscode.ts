@@ -63,6 +63,25 @@ export enum ConfigurationTarget {
   Global = 1,
 }
 
+export class Uri {
+  static file(fsPath: string): Uri {
+    return new Uri('file', fsPath)
+  }
+
+  readonly path: string
+
+  constructor(
+    readonly scheme: string,
+    readonly fsPath: string,
+  ) {
+    this.path = fsPath
+  }
+
+  toString(): string {
+    return `${this.scheme}://${this.fsPath}`
+  }
+}
+
 export class LanguageModelTextPart {
   constructor(readonly value: string) {}
 }
@@ -146,8 +165,8 @@ export const window = {
   showErrorMessage: vi.fn(async (_message?: string, ..._items: unknown[]) => undefined as string | undefined),
   showInputBox: vi.fn(async (_options?: { validateInput?: (value: string) => string | undefined }) =>
     undefined as string | undefined),
-  showQuickPick: vi.fn(async (_items?: unknown, _options?: unknown) =>
-    undefined as { command: string } | undefined),
+  showQuickPick: vi.fn(async (_items?: unknown, _options?: unknown): Promise<unknown> =>
+    undefined),
 }
 
 export const workspace = {
@@ -160,6 +179,14 @@ export const workspace = {
       settings.set(`${section}.${key}`, value)
     },
   })),
+  fs: {
+    stat: vi.fn(async (_uri: Uri) => ({ size: 0 })),
+    readFile: vi.fn(async (_uri: Uri) => new Uint8Array()),
+  },
+}
+
+export const extensions = {
+  getExtension: vi.fn(),
 }
 
 export const commands = {
@@ -190,8 +217,16 @@ export function resetVSCodeMock(): void {
   for (const value of Object.values(window))
     value.mockReset()
   window.createOutputChannel.mockReturnValue(vscodeMock.output)
-  for (const value of Object.values(workspace))
-    value.mockClear()
+  for (const value of Object.values(workspace)) {
+    if ('mockClear' in value) {
+      value.mockClear()
+    }
+  }
+  workspace.fs.stat.mockReset()
+  workspace.fs.readFile.mockReset()
+  workspace.fs.stat.mockResolvedValue({ size: 0 })
+  workspace.fs.readFile.mockResolvedValue(new Uint8Array())
+  extensions.getExtension.mockReset()
   for (const value of Object.values(commands))
     value.mockClear()
   lm.registerLanguageModelChatProvider.mockClear()

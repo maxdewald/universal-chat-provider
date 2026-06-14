@@ -223,14 +223,14 @@ describe('model mapping', () => {
       {
         id: 'gemini',
         detail: '128K context · Antigravity',
-        tooltip: expect.stringContaining('(Antigravity)'),
       },
       {
         id: 'gpt',
         detail: '128K context · OpenAI',
-        tooltip: expect.stringContaining('(OpenAI)'),
       },
     ])
+    expect(models[0]?.tooltip).toContain('(Antigravity)')
+    expect(models[1]?.tooltip).toContain('(OpenAI)')
   })
 
   it('deduplicates IDs, applies safe numeric fallbacks, and filters catalog media models', () => {

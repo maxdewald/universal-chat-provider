@@ -23,7 +23,7 @@ import {
 import { configureConnection, CredentialStore, normalizeBaseUrl } from './credentials'
 import { mapProxyModels } from './model'
 import { CLIProxyClient, ProxyHttpError } from './proxy-client'
-import { buildRequest } from './request'
+import { buildRequest, buildTextRequest } from './request'
 import { countTokens } from './tokenizer'
 
 export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<ProviderModel> {
@@ -122,6 +122,56 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     return this.refresh(interactive)
   }
 
+  async getModels(
+    interactive: boolean,
+    token?: CancellationToken,
+  ): Promise<readonly ProviderModel[]> {
+    return this.refresh(interactive, token)
+  }
+
+  async completeText(
+    model: ProviderModel,
+    prompt: string,
+    maxOutputTokens: number,
+    token?: CancellationToken,
+  ): Promise<string | undefined> {
+    if (token?.isCancellationRequested)
+      return undefined
+
+    const apiKey = await this.credentials.get()
+    if (apiKey === undefined)
+      throw LanguageModelError.NoPermissions('Configure a CLIProxyAPI API key first.')
+
+    const controller = new AbortController()
+    const cancellation = token?.onCancellationRequested(() => controller.abort())
+    const client = new CLIProxyClient(this.baseUrl(), apiKey)
+    let text = ''
+
+    try {
+      await client.streamResponse(
+        buildTextRequest(model, prompt, maxOutputTokens),
+        {
+          onText: delta => text += delta,
+          onToolCall: () => {},
+          onUsage: usage =>
+            this.output.appendLine(`[usage] ${model.proxyModelId} (commit message): ${JSON.stringify(usage)}`),
+        },
+        controller.signal,
+      )
+      return token?.isCancellationRequested ? undefined : text
+    }
+    catch (error) {
+      if (token?.isCancellationRequested)
+        return undefined
+      if (error instanceof ProxyHttpError && (error.status === 401 || error.status === 403))
+        void this.showCredentialRecovery()
+      throw mapProviderError(error)
+    }
+    finally {
+      cancellation?.dispose()
+    }
+  }
+
   async importConfig(): Promise<void> {
     await this.importAndRefresh(true)
   }
@@ -132,7 +182,8 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     if (await this.credentials.get() === undefined && await this.credentials.prompt() === undefined)
       return
     this.credentialRecoveryShown = false
-    await this.forceRefresh(true)
+    if (this.refreshPromise === undefined)
+      await this.forceRefresh(true)
   }
 
   async clearCredentials(): Promise<void> {
@@ -264,7 +315,8 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
       return
 
     this.credentialRecoveryShown = false
-    await this.forceRefresh(false)
+    if (this.refreshPromise === undefined)
+      await this.forceRefresh(false)
     if (showSuccess)
       void window.showInformationMessage('CLIProxyAPI API key imported and models refreshed.')
   }

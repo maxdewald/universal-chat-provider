@@ -2,7 +2,8 @@
 
 Expose the chat-capable models from a local
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server in GitHub
-Copilot Chat.
+Copilot Chat, and use those models to generate Git commit messages without a
+Copilot subscription.
 
 The extension discovers models from CLIProxyAPI, enriches them with context,
 output, tool, image, and reasoning metadata, and refreshes the list on startup
@@ -18,9 +19,14 @@ entries.
 - VS Code 1.124 or newer
 - GitHub Copilot Chat
 
-This extension uses the proposed `chatProvider` and
-`languageModelThinkingPart` APIs. Proposed API extensions must be installed
-from a VSIX and cannot be published as ordinary Marketplace extensions.
+GitHub Copilot Chat is required to expose the models in Chat, but it is not
+required for commit-message generation. The commit feature uses VS Code's
+built-in Git extension and talks directly to CLIProxyAPI.
+
+This extension uses the proposed `chatProvider`,
+`contribSourceControlInputBoxMenu`, and `languageModelThinkingPart` APIs.
+Proposed API extensions must be installed from a VSIX and cannot be published
+as ordinary Marketplace extensions.
 
 ## Setup
 
@@ -31,6 +37,8 @@ from a VSIX and cannot be published as ordinary Marketplace extensions.
    finds a local config, use the bottom **Import API Key** notification action.
    If no config is found, use its **Configure Connection** action instead.
 5. Open Copilot Chat and choose a model under the **CLIProxyAPI** provider.
+6. Run **CLIProxyAPI: Select Commit Message Model** to choose the independent
+   model used by the Source Control commit-message action.
 
 The API key is stored in VS Code `SecretStorage`. The extension never starts or
 stops CLIProxyAPI itself. Model discovery runs immediately at startup when a key
@@ -40,6 +48,23 @@ For local instances, the extension watches `config.yaml` and the configured
 `auth-dir` for credential changes and refreshes models after a short debounce.
 CLIProxyAPI does not expose its internal model-registry events over HTTP, so
 remote instances can be refreshed through the command or a settings change.
+
+## Commit Messages
+
+The sparkle action in the Git Source Control input generates a commit message
+from staged changes. When nothing is staged, it falls back to tracked and
+untracked working-tree changes. The generated message is placed in the input
+box for review and is never committed automatically.
+
+Commit-message model selection is independent from Chat. The selected model is
+remembered in `modelProvider.commitMessage.model`; if no model is selected, the
+extension automatically uses the only available model or opens a live picker.
+Use **CLIProxyAPI: Select Commit Message Model** to change it.
+
+By default, the generator requests a concise Conventional Commit. Set
+`modelProvider.commitMessage.instructions` to replace that style with
+repository-specific instructions. Diff context is bounded per file and per
+request, and unresolved merge conflicts must be resolved before generation.
 
 ## Model Metadata
 
@@ -61,12 +86,14 @@ server-side usage is still reported by CLIProxyAPI after a response.
 
 <!-- configs -->
 
-| Key                                    | Description                                                                           | Type      | Default                   |
-| -------------------------------------- | ------------------------------------------------------------------------------------- | --------- | ------------------------- |
-| `modelProvider.baseUrl`                | Base URL of the CLIProxyAPI server.                                                   | `string`  | `"http://127.0.0.1:8317"` |
-| `modelProvider.configPath`             | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery. | `string`  | `""`                      |
-| `modelProvider.autoDetectConfig`       | Search common local CLIProxyAPI config locations when no config path is set.          | `boolean` | `true`                    |
-| `modelProvider.defaultMaxOutputTokens` | Fallback output-token limit when CLIProxyAPI provides no model-specific value.        | `number`  | `16384`                   |
+| Key                                        | Description                                                                                                                                    | Type      | Default                   |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
+| `modelProvider.baseUrl`                    | Base URL of the CLIProxyAPI server.                                                                                                            | `string`  | `"http://127.0.0.1:8317"` |
+| `modelProvider.configPath`                 | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                          | `string`  | `""`                      |
+| `modelProvider.autoDetectConfig`           | Search common local CLIProxyAPI config locations when no config path is set.                                                                   | `boolean` | `true`                    |
+| `modelProvider.defaultMaxOutputTokens`     | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                 | `number`  | `16384`                   |
+| `modelProvider.commitMessage.model`        | Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models.       | `string`  | `""`                      |
+| `modelProvider.commitMessage.instructions` | Optional commit-message instructions. When empty, concise Conventional Commits are generated; when set, these instructions replace that style. | `string`  | `""`                      |
 
 <!-- configs -->
 
@@ -74,14 +101,16 @@ server-side usage is still reported by CLIProxyAPI after a response.
 
 <!-- commands -->
 
-| Command                          | Title                                   |
-| -------------------------------- | --------------------------------------- |
-| `modelProvider.manage`           | CLIProxyAPI: Manage Provider            |
-| `modelProvider.configure`        | CLIProxyAPI: Configure Connection       |
-| `modelProvider.importConfig`     | CLIProxyAPI: Import API Key from Config |
-| `modelProvider.refresh`          | CLIProxyAPI: Refresh Models             |
-| `modelProvider.clearCredentials` | CLIProxyAPI: Clear Stored API Key       |
-| `modelProvider.showLogs`         | CLIProxyAPI: Show Logs                  |
+| Command                                  | Title                                    |
+| ---------------------------------------- | ---------------------------------------- |
+| `modelProvider.manage`                   | CLIProxyAPI: Manage Provider             |
+| `modelProvider.configure`                | CLIProxyAPI: Configure Connection        |
+| `modelProvider.importConfig`             | CLIProxyAPI: Import API Key from Config  |
+| `modelProvider.refresh`                  | CLIProxyAPI: Refresh Models              |
+| `modelProvider.generateCommitMessage`    | CLIProxyAPI: Generate Commit Message     |
+| `modelProvider.selectCommitMessageModel` | CLIProxyAPI: Select Commit Message Model |
+| `modelProvider.clearCredentials`         | CLIProxyAPI: Clear Stored API Key        |
+| `modelProvider.showLogs`                 | CLIProxyAPI: Show Logs                   |
 
 <!-- commands -->
 

@@ -274,7 +274,7 @@ function formatProviderName(value: string): string {
   const known = knownProviderNames[normalized.toLowerCase()]
   if (known !== undefined)
     return known
-  return normalized.replace(/[A-Za-z][\w'-]*/g, word => capitalize(word))
+  return normalized.replace(/[a-z][\w'-]*/gi, word => capitalize(word))
 }
 
 function normalizeReasoningModelName(name: string, levels: readonly string[]): string {

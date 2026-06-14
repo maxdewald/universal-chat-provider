@@ -4,6 +4,7 @@ import {
   lm,
   window,
 } from 'vscode'
+import { CommitMessageService } from './commit-message'
 import { CLIProxyLanguageModelProvider } from './provider'
 
 let provider: CLIProxyLanguageModelProvider | undefined
@@ -11,6 +12,7 @@ let provider: CLIProxyLanguageModelProvider | undefined
 export function activate(context: ExtensionContext): void {
   const output = window.createOutputChannel('CLIProxyAPI Model Provider', { log: true })
   provider = new CLIProxyLanguageModelProvider(context, output)
+  const commitMessages = new CommitMessageService(provider)
 
   context.subscriptions.push(
     output,
@@ -26,6 +28,12 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand('modelProvider.refresh', async () => {
       const models = await provider?.forceRefresh(true) ?? []
       void window.showInformationMessage(`CLIProxyAPI exposed ${models.length} chat models.`)
+    }),
+    commands.registerCommand('modelProvider.generateCommitMessage', async (...args: Parameters<CommitMessageService['generate']>) => {
+      await commitMessages.generate(...args)
+    }),
+    commands.registerCommand('modelProvider.selectCommitMessageModel', async () => {
+      await commitMessages.selectModel()
     }),
     commands.registerCommand('modelProvider.clearCredentials', async () => {
       const choice = await window.showWarningMessage(
@@ -62,6 +70,11 @@ async function manageProvider(): Promise<void> {
       label: '$(key) Import API Key from Config',
       description: 'Store a key from CLIProxyAPI config.yaml and refresh models',
       command: 'modelProvider.importConfig',
+    },
+    {
+      label: '$(sparkle) Select Commit Message Model',
+      description: 'Choose the CLIProxyAPI model used only for commit messages',
+      command: 'modelProvider.selectCommitMessageModel',
     },
     {
       label: '$(output) Show Logs',
