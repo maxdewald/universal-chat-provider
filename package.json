@@ -33,11 +33,11 @@
   ],
   "engines": {
     "node": ">=22.18.0",
-    "vscode": "^1.125.0"
+    "vscode": "^1.124.0"
   },
   "enabledApiProposals": [
-    "chatProvider@5",
-    "languageModelThinkingPart@1"
+    "chatProvider",
+    "languageModelThinkingPart"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -46,8 +46,7 @@
     "languageModelChatProviders": [
       {
         "vendor": "cliproxyapi",
-        "displayName": "CLIProxyAPI",
-        "managementCommand": "modelProvider.manage"
+        "displayName": "CLIProxyAPI"
       }
     ],
     "commands": [
