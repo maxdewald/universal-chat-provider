@@ -72,4 +72,81 @@ describe('model mapping', () => {
 
     expect(catalog.get('shared')?.thinking?.levels).toEqual(['low', 'high'])
   })
+
+  it('derives reasoning levels and capability fallbacks from the catalog', () => {
+    const [model] = mapProxyModels(
+      [{ id: 'vendor/model' }],
+      [],
+      new Map([['vendor/model', {
+        id: 'vendor/model',
+        type: 'vendor',
+        display_name: 'Catalog Model',
+        version: 'v1',
+        inputTokenLimit: 1_000_000,
+        outputTokenLimit: 50_000,
+        supportedInputModalities: ['TEXT', 'IMAGE'],
+        supported_parameters: [],
+        thinking: {
+          zero_allowed: true,
+          dynamic_allowed: true,
+          max: 10,
+        },
+      }]]),
+      { defaultMaxOutputTokens: 10 },
+    )
+
+    expect(model).toMatchObject({
+      name: 'Catalog Model',
+      family: 'vendor',
+      version: 'v1',
+      maxInputTokens: 950_000,
+      maxOutputTokens: 50_000,
+      reasoningLevels: ['none', 'auto', 'low', 'medium', 'high'],
+      detail: '1M context · vendor',
+      capabilities: {
+        imageInput: true,
+        toolCalling: false,
+      },
+    })
+    expect(model?.configurationSchema?.properties?.reasoningEffort).toMatchObject({
+      default: 'medium',
+      enumItemLabels: ['None', 'Auto', 'Low', 'Medium', 'High'],
+    })
+  })
+
+  it('deduplicates IDs, applies safe numeric fallbacks, and filters catalog media models', () => {
+    const models = mapProxyModels(
+      [
+        { id: '' },
+        { id: 'tiny' },
+        { id: 'tiny' },
+        { id: 'picture' },
+        { id: 'audio-only' },
+      ],
+      [{ slug: 'tiny', context_window: -1, max_context_window: Number.NaN }],
+      new Map([
+        ['tiny', { id: 'tiny', max_completion_tokens: -5 }],
+        ['picture', { id: 'picture', type: 'openai-image' }],
+        ['audio-only', { id: 'audio-only', supportedOutputModalities: ['audio'] }],
+      ]),
+      { defaultMaxOutputTokens: 8 },
+    )
+
+    expect(models).toHaveLength(1)
+    expect(models[0]).toMatchObject({
+      id: 'tiny',
+      maxInputTokens: 127_992,
+      maxOutputTokens: 8,
+      totalContextTokens: 128_000,
+      maximumContextTokens: 128_000,
+    })
+  })
+
+  it('ignores malformed catalog sections', () => {
+    expect(flattenCatalog(null)).toEqual(new Map())
+    expect(flattenCatalog({
+      invalid: 'not an array',
+      entries: [null, {}, { id: 1 }, { id: 'valid', outputTokenLimit: 20 }],
+    })).toEqual(new Map([['valid', { id: 'valid', outputTokenLimit: 20 }]]))
+  })
 })

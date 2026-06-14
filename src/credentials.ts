@@ -1,12 +1,13 @@
 import type { ExtensionContext } from 'vscode'
-import { access, readFile } from 'node:fs/promises'
+import type { LocalProxyConfig } from './local-config'
+import { access } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
+import untildify from 'untildify'
 import { ConfigurationTarget, window, workspace } from 'vscode'
-import { parse } from 'yaml'
+import { readLocalProxyConfig } from './local-config'
 
 const SECRET_KEY = 'cliproxyapi.apiKey'
-const PLACEHOLDER_KEY = /^your-api-key(?:-\d+)?$/i
 
 export class CredentialStore {
   constructor(private readonly context: ExtensionContext) {}
@@ -23,47 +24,37 @@ export class CredentialStore {
     return this.context.secrets.delete(SECRET_KEY)
   }
 
-  async importFromConfig(interactive: boolean): Promise<string | undefined> {
+  async inspectLocalConfig(): Promise<LocalProxyConfig | undefined> {
     const configPath = await findConfigPath()
-    if (configPath === undefined) {
-      if (interactive)
-        void window.showWarningMessage('No CLIProxyAPI config.yaml was found. Configure its path in settings.')
+    if (configPath === undefined)
       return undefined
-    }
+    return readLocalProxyConfig(configPath)
+  }
 
-    let key: string | undefined
+  async importFromConfig(showErrors: boolean): Promise<string | undefined> {
+    let config: LocalProxyConfig | undefined
     try {
-      const document = parse(await readFile(configPath, 'utf8'), {
-        prettyErrors: true,
-        strict: true,
-        stringKeys: true,
-      }) as unknown
-      key = firstApiKey(document)
+      config = await this.inspectLocalConfig()
     }
     catch (error) {
-      if (interactive)
+      if (showErrors)
         void window.showErrorMessage(`Could not read CLIProxyAPI config: ${errorMessage(error)}`)
       return undefined
     }
 
-    if (key === undefined) {
-      if (interactive)
-        void window.showWarningMessage(`No usable API key was found in ${configPath}.`)
+    if (config === undefined) {
+      if (showErrors)
+        void window.showWarningMessage('No CLIProxyAPI config.yaml was found. Configure its path in settings.')
+      return undefined
+    }
+    if (config.apiKey === undefined) {
+      if (showErrors)
+        void window.showWarningMessage(`No usable API key was found in ${config.path}.`)
       return undefined
     }
 
-    if (interactive) {
-      const choice = await window.showInformationMessage(
-        `Import the first CLIProxyAPI API key from ${configPath} into VS Code SecretStorage?`,
-        { modal: true },
-        'Import',
-      )
-      if (choice !== 'Import')
-        return undefined
-    }
-
-    await this.set(key)
-    return key
+    await this.set(config.apiKey)
+    return config.apiKey
   }
 
   async prompt(): Promise<string | undefined> {
@@ -82,18 +73,7 @@ export class CredentialStore {
 }
 
 export async function findConfigPath(): Promise<string | undefined> {
-  const settings = workspace.getConfiguration('modelProvider')
-  const configured = settings.get<string>('configPath', '').trim()
-  const candidates = configured.length > 0
-    ? [expandHome(configured)]
-    : settings.get<boolean>('autoDetectConfig', true)
-      ? [
-          join(homedir(), 'cliproxyapi', 'config.yaml'),
-          join(homedir(), '.config', 'cliproxyapi', 'config.yaml'),
-          join(homedir(), '.cli-proxy-api', 'config.yaml'),
-        ]
-      : []
-
+  const candidates = configCandidates()
   for (const candidate of candidates) {
     try {
       await access(candidate)
@@ -104,7 +84,23 @@ export async function findConfigPath(): Promise<string | undefined> {
   return undefined
 }
 
-export async function configureConnection(): Promise<void> {
+export function configCandidates(): string[] {
+  const settings = workspace.getConfiguration('modelProvider')
+  const configured = settings.get<string>('configPath', '').trim()
+  if (configured.length > 0) {
+    const expanded = untildify(configured)
+    return [isAbsolute(expanded) ? expanded : resolve(expanded)]
+  }
+  return settings.get<boolean>('autoDetectConfig', true)
+    ? [
+        join(homedir(), 'cliproxyapi', 'config.yaml'),
+        join(homedir(), '.config', 'cliproxyapi', 'config.yaml'),
+        join(homedir(), '.cli-proxy-api', 'config.yaml'),
+      ]
+    : []
+}
+
+export async function configureConnection(): Promise<boolean> {
   const settings = workspace.getConfiguration('modelProvider')
   const baseUrl = await window.showInputBox({
     title: 'CLIProxyAPI Base URL',
@@ -114,7 +110,7 @@ export async function configureConnection(): Promise<void> {
     validateInput: validateHttpUrl,
   })
   if (baseUrl === undefined || baseUrl.length === 0)
-    return
+    return false
   await settings.update('baseUrl', normalizeBaseUrl(baseUrl), ConfigurationTarget.Global)
 
   const configPath = await window.showInputBox({
@@ -125,25 +121,11 @@ export async function configureConnection(): Promise<void> {
   })
   if (configPath !== undefined)
     await settings.update('configPath', configPath.trim(), ConfigurationTarget.Global)
+  return true
 }
 
 export function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, '')
-}
-
-function firstApiKey(value: unknown): string | undefined {
-  if (!isRecord(value) || !Array.isArray(value['api-keys']))
-    return undefined
-  return value['api-keys'].find((candidate): candidate is string =>
-    typeof candidate === 'string'
-    && candidate.trim().length > 0
-    && !PLACEHOLDER_KEY.test(candidate.trim()),
-  )?.trim()
-}
-
-function expandHome(value: string): string {
-  const expanded = value.startsWith('~/') ? join(homedir(), value.slice(2)) : value
-  return isAbsolute(expanded) ? expanded : resolve(expanded)
 }
 
 function validateHttpUrl(value: string): string | undefined {
@@ -156,10 +138,6 @@ function validateHttpUrl(value: string): string | undefined {
   catch {
     return 'Enter a valid URL.'
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }
 
 function errorMessage(error: unknown): string {

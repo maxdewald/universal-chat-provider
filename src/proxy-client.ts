@@ -3,6 +3,7 @@ import type {
   ProxyModelListEntry,
   ProxyModelMetadata,
 } from './model'
+import { isPlainObject } from 'moderndash'
 import { flattenCatalog } from './model'
 import { parseServerSentEvents } from './sse'
 
@@ -187,16 +188,15 @@ export class CLIProxyClient {
 }
 
 async function responseError(response: Response): Promise<ProxyHttpError> {
-  let body: unknown
+  const text = await response.text().catch(() => '')
+  let body: unknown = text
   try {
-    body = await response.json()
+    body = JSON.parse(text) as unknown
   }
-  catch {
-    body = await response.text().catch(() => undefined)
-  }
-  const message = isRecord(body)
+  catch {}
+  const message = isPlainObject(body)
     ? stringValue(body.error) ?? stringValue(recordValue(body.error)?.message)
-    : undefined
+    : typeof body === 'string' && body.trim() ? body.trim() : undefined
   return new ProxyHttpError(message ?? `CLIProxyAPI request failed with HTTP ${response.status}.`, response.status, body)
 }
 
@@ -212,7 +212,7 @@ function emitToolCall(
   if (call.arguments.trim()) {
     try {
       const parsed: unknown = JSON.parse(call.arguments)
-      input = isRecord(parsed) ? parsed : { value: parsed }
+      input = isPlainObject(parsed) ? parsed : { value: parsed }
     }
     catch {
       input = { raw: call.arguments }
@@ -229,13 +229,9 @@ function toolKey(payload: Record<string, unknown>, item?: Record<string, unknown
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined
+  return isPlainObject(value) ? value : undefined
 }
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
 }

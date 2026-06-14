@@ -12,6 +12,7 @@ export default defineConfig({
     neverBundle: ['vscode'],
     alwaysBundle: [
       'js-tiktoken',
+      'untildify',
       'yaml',
     ],
     onlyBundle: false,

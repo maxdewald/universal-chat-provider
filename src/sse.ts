@@ -15,7 +15,8 @@ export async function* parseServerSentEvents(
       const { done, value } = await reader.read()
       if (done)
         break
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+      buffer += decoder.decode(value, { stream: true })
+      buffer = buffer.replace(/\r\n/g, '\n')
       let boundary = buffer.indexOf('\n\n')
       while (boundary >= 0) {
         const block = buffer.slice(0, boundary)
@@ -27,7 +28,7 @@ export async function* parseServerSentEvents(
       }
     }
 
-    buffer += decoder.decode()
+    buffer = (buffer + decoder.decode()).replace(/\r\n?/g, '\n')
     const event = parseBlock(buffer)
     if (event)
       yield event

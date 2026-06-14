@@ -5,28 +5,25 @@ import type {
   LanguageModelChatRequestMessage,
   LanguageModelResponsePart2,
   OutputChannel,
+  PrepareLanguageModelChatModelOptions,
   Progress,
   ProvideLanguageModelChatResponseOptions,
 } from 'vscode'
+import type { LocalProxyConfig } from './local-config'
 import type { ProviderModel } from './model'
-import { Buffer } from 'node:buffer'
-import process from 'node:process'
 import {
   EventEmitter,
-  LanguageModelChatMessageRole,
-  LanguageModelChatToolMode,
-  LanguageModelDataPart,
   LanguageModelError,
   LanguageModelTextPart,
   LanguageModelThinkingPart,
   LanguageModelToolCallPart,
-  LanguageModelToolResultPart,
   window,
   workspace,
 } from 'vscode'
-import { CredentialStore, normalizeBaseUrl } from './credentials'
+import { configureConnection, CredentialStore, normalizeBaseUrl } from './credentials'
 import { mapProxyModels } from './model'
 import { CLIProxyClient, ProxyHttpError } from './proxy-client'
+import { buildRequest } from './request'
 import { countTokens } from './tokenizer'
 
 export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<ProviderModel> {
@@ -34,8 +31,9 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   private readonly credentials: CredentialStore
   private cachedModels: ProviderModel[] = []
   private cachedFingerprint = ''
-  private refreshTimer?: NodeJS.Timeout
   private refreshPromise: Promise<ProviderModel[]> | undefined
+  private onboardingShown = false
+  private credentialRecoveryShown = false
 
   readonly onDidChangeLanguageModelChatInformation = this.changeEmitter.event
 
@@ -44,17 +42,22 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     private readonly output: OutputChannel,
   ) {
     this.credentials = new CredentialStore(context)
-    context.subscriptions.push(this.changeEmitter)
-    this.scheduleRefresh()
   }
 
   dispose(): void {
-    if (this.refreshTimer)
-      clearTimeout(this.refreshTimer)
+    this.changeEmitter.dispose()
+  }
+
+  async initialize(): Promise<void> {
+    if (await this.credentials.get() === undefined) {
+      await this.showOnboarding()
+      return
+    }
+    await this.forceRefresh(false)
   }
 
   async provideLanguageModelChatInformation(
-    options: { silent: boolean },
+    options: PrepareLanguageModelChatModelOptions,
     token: CancellationToken,
   ): Promise<ProviderModel[]> {
     if (token.isCancellationRequested)
@@ -94,6 +97,8 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     catch (error) {
       if (token.isCancellationRequested)
         return
+      if (error instanceof ProxyHttpError && (error.status === 401 || error.status === 403))
+        void this.showCredentialRecovery()
       throw mapProviderError(error)
     }
     finally {
@@ -112,14 +117,22 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   }
 
   async forceRefresh(interactive = true): Promise<ProviderModel[]> {
-    this.refreshPromise = undefined
+    if (this.refreshPromise !== undefined)
+      await this.refreshPromise
     return this.refresh(interactive)
   }
 
   async importConfig(): Promise<void> {
-    const key = await this.credentials.importFromConfig(true)
-    if (key !== undefined)
-      await this.forceRefresh(false)
+    await this.importAndRefresh(true)
+  }
+
+  async configure(): Promise<void> {
+    if (!await configureConnection())
+      return
+    if (await this.credentials.get() === undefined && await this.credentials.prompt() === undefined)
+      return
+    this.credentialRecoveryShown = false
+    await this.forceRefresh(true)
   }
 
   async clearCredentials(): Promise<void> {
@@ -127,12 +140,7 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     this.cachedModels = []
     this.cachedFingerprint = ''
     this.changeEmitter.fire()
-  }
-
-  async setApiKeyForTesting(apiKey: string): Promise<void> {
-    if (process.env.MODEL_PROVIDER_TEST !== '1')
-      throw new Error('The test API is disabled.')
-    await this.credentials.set(apiKey)
+    await this.showOnboarding(true)
   }
 
   private async refresh(interactive: boolean, token?: CancellationToken): Promise<ProviderModel[]> {
@@ -140,7 +148,6 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
       return this.refreshPromise
     this.refreshPromise = this.doRefresh(interactive, token).finally(() => {
       this.refreshPromise = undefined
-      this.scheduleRefresh()
     })
     return this.refreshPromise
   }
@@ -167,12 +174,16 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
         this.cachedModels = models
         this.changeEmitter.fire()
       }
+      this.credentialRecoveryShown = false
       this.output.appendLine(`Discovered ${models.length} CLIProxyAPI chat models at ${this.baseUrl()}.`)
       return this.cachedModels
     }
     catch (error) {
       this.output.appendLine(`Model discovery failed: ${errorMessage(error)}`)
-      if (interactive)
+      const rejectedCredentials = error instanceof ProxyHttpError && (error.status === 401 || error.status === 403)
+      if (rejectedCredentials)
+        void this.showCredentialRecovery()
+      else if (interactive)
         void window.showErrorMessage(`CLIProxyAPI model discovery failed: ${errorMessage(error)}`)
       return this.cachedModels
     }
@@ -182,10 +193,8 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   }
 
   private async acquireApiKey(): Promise<string | undefined> {
-    const imported = await this.credentials.importFromConfig(true)
-    if (imported !== undefined)
-      return imported
-    return this.credentials.prompt()
+    await this.showOnboarding()
+    return this.credentials.get()
   }
 
   private baseUrl(): string {
@@ -194,104 +203,71 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     )
   }
 
-  private scheduleRefresh(): void {
-    if (this.refreshTimer !== undefined)
-      clearTimeout(this.refreshTimer)
-    const seconds = workspace.getConfiguration('modelProvider').get<number>('refreshIntervalSeconds', 60)
-    this.refreshTimer = setTimeout(() => void this.refresh(false), Math.max(15, seconds) * 1000)
-  }
-}
+  private async showOnboarding(force = false): Promise<void> {
+    if (this.onboardingShown && !force)
+      return
+    this.onboardingShown = true
 
-function buildRequest(
-  model: ProviderModel,
-  messages: readonly LanguageModelChatRequestMessage[],
-  options: ProvideLanguageModelChatResponseOptions,
-  reasoningEffort?: string,
-): Record<string, unknown> {
-  const request: Record<string, unknown> = {
-    model: model.proxyModelId,
-    input: messages.flatMap(convertMessage),
-    stream: true,
-    max_output_tokens: model.maxOutputTokens,
-  }
-
-  if (reasoningEffort !== undefined && model.reasoningLevels.includes(reasoningEffort))
-    request.reasoning = { effort: reasoningEffort, summary: 'auto' }
-
-  if (options.tools !== undefined && options.tools.length > 0) {
-    request.tools = options.tools.map(tool => ({
-      type: 'function',
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.inputSchema ?? { type: 'object', properties: {} },
-      strict: false,
-    }))
-    request.tool_choice = options.toolMode === LanguageModelChatToolMode.Required ? 'required' : 'auto'
-    request.parallel_tool_calls = true
-  }
-
-  return request
-}
-
-function convertMessage(message: LanguageModelChatRequestMessage): Record<string, unknown>[] {
-  const role = message.role === LanguageModelChatMessageRole.Assistant ? 'assistant' : 'user'
-  const content: Record<string, unknown>[] = []
-  const items: Record<string, unknown>[] = []
-
-  for (const part of message.content) {
-    if (part instanceof LanguageModelTextPart) {
-      content.push({
-        type: role === 'assistant' ? 'output_text' : 'input_text',
-        text: part.value,
-      })
+    let config: LocalProxyConfig | undefined
+    try {
+      config = await this.credentials.inspectLocalConfig()
     }
-    else if (part instanceof LanguageModelDataPart) {
-      if (part.mimeType.startsWith('image/')) {
-        content.push({
-          type: 'input_image',
-          image_url: `data:${part.mimeType};base64,${Buffer.from(part.data).toString('base64')}`,
-        })
+    catch (error) {
+      this.output.appendLine(`Could not inspect CLIProxyAPI config: ${errorMessage(error)}`)
+    }
+
+    if (config?.apiKey !== undefined) {
+      const choice = await window.showInformationMessage(
+        'A local CLIProxyAPI config was found. Import its API key to load models?',
+        'Import API Key',
+        'Configure',
+      )
+      if (choice === 'Import API Key') {
+        await this.importAndRefresh(true)
       }
-      else {
-        content.push({
-          type: role === 'assistant' ? 'output_text' : 'input_text',
-          text: new TextDecoder().decode(part.data),
-        })
+      else if (choice === 'Configure') {
+        await this.configure()
       }
+      return
     }
-    else if (part instanceof LanguageModelToolCallPart) {
-      items.push({
-        type: 'function_call',
-        call_id: part.callId,
-        name: part.name,
-        arguments: JSON.stringify(part.input),
-      })
+
+    const choice = await window.showInformationMessage(
+      'CLIProxyAPI setup is incomplete. Configure a connection to load local models.',
+      'Configure Connection',
+      'Retry',
+    )
+    if (choice === 'Configure Connection')
+      await this.configure()
+    else if (choice === 'Retry')
+      await this.showOnboarding(true)
+  }
+
+  private async showCredentialRecovery(): Promise<void> {
+    if (this.credentialRecoveryShown)
+      return
+    this.credentialRecoveryShown = true
+    const choice = await window.showWarningMessage(
+      'CLIProxyAPI rejected the stored API key. Re-import it from the local config or configure the connection.',
+      'Re-import API Key',
+      'Configure',
+    )
+    if (choice === 'Re-import API Key') {
+      await this.importAndRefresh(false)
     }
-    else if (part instanceof LanguageModelToolResultPart) {
-      items.push({
-        type: 'function_call_output',
-        call_id: part.callId,
-        output: serializeToolResult(part),
-      })
+    else if (choice === 'Configure') {
+      await this.configure()
     }
   }
 
-  if (content.length)
-    items.unshift({ role, content })
-  return items
-}
+  private async importAndRefresh(showSuccess: boolean): Promise<void> {
+    if (await this.credentials.importFromConfig(true) === undefined)
+      return
 
-function serializeToolResult(part: LanguageModelToolResultPart): string {
-  return part.content.map((value) => {
-    if (value instanceof LanguageModelTextPart)
-      return value.value
-    if (value instanceof LanguageModelDataPart) {
-      return value.mimeType.startsWith('text/')
-        ? new TextDecoder().decode(value.data)
-        : `[${value.mimeType} data]`
-    }
-    return JSON.stringify(value)
-  }).join('\n')
+    this.credentialRecoveryShown = false
+    await this.forceRefresh(false)
+    if (showSuccess)
+      void window.showInformationMessage('CLIProxyAPI API key imported and models refreshed.')
+  }
 }
 
 function mapProviderError(error: unknown): Error {

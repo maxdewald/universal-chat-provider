@@ -1,29 +1,14 @@
 import type { ExtensionContext, QuickPickItem } from 'vscode'
-import type { ProviderModel } from './model'
-import process from 'node:process'
 import {
-  CancellationTokenSource,
   commands,
-  LanguageModelChatMessageRole,
-  LanguageModelChatToolMode,
-  LanguageModelTextPart,
   lm,
   window,
-  workspace,
 } from 'vscode'
-import { configureConnection } from './credentials'
 import { CLIProxyLanguageModelProvider } from './provider'
 
 let provider: CLIProxyLanguageModelProvider | undefined
 
-export interface ModelProviderTestApi {
-  configure: (baseUrl: string, apiKey: string) => Promise<void>
-  models: () => Promise<ProviderModel[]>
-  request: (modelId: string, prompt: string, reasoningEffort?: string) => Promise<string>
-  countTokens: (modelId: string, value: string) => Promise<number>
-}
-
-export function activate(context: ExtensionContext): ModelProviderTestApi | undefined {
+export function activate(context: ExtensionContext): void {
   const output = window.createOutputChannel('CLIProxyAPI Model Provider', { log: true })
   provider = new CLIProxyLanguageModelProvider(context, output)
 
@@ -33,8 +18,7 @@ export function activate(context: ExtensionContext): ModelProviderTestApi | unde
     lm.registerLanguageModelChatProvider('cliproxyapi', provider),
     commands.registerCommand('modelProvider.manage', async () => manageProvider()),
     commands.registerCommand('modelProvider.configure', async () => {
-      await configureConnection()
-      await provider?.forceRefresh(false)
+      await provider?.configure()
     }),
     commands.registerCommand('modelProvider.importConfig', async () => {
       await provider?.importConfig()
@@ -53,14 +37,9 @@ export function activate(context: ExtensionContext): ModelProviderTestApi | unde
         await provider?.clearCredentials()
     }),
     commands.registerCommand('modelProvider.showLogs', () => output.show(true)),
-    workspace.onDidChangeConfiguration(async (event) => {
-      if (event.affectsConfiguration('modelProvider'))
-        await provider?.forceRefresh(false)
-    }),
   )
 
-  if (process.env.MODEL_PROVIDER_TEST === '1')
-    return createTestApi()
+  void provider.initialize()
 }
 
 export function deactivate(): void {
@@ -81,7 +60,7 @@ async function manageProvider(): Promise<void> {
     },
     {
       label: '$(key) Import API Key from Config',
-      description: 'Confirm and store a key from CLIProxyAPI config.yaml',
+      description: 'Store a key from CLIProxyAPI config.yaml and refresh models',
       command: 'modelProvider.importConfig',
     },
     {
@@ -101,62 +80,4 @@ async function manageProvider(): Promise<void> {
   })
   if (selected)
     await commands.executeCommand(selected.command)
-}
-
-function createTestApi(): ModelProviderTestApi {
-  return {
-    async configure(baseUrl, apiKey) {
-      await workspace.getConfiguration('modelProvider').update('baseUrl', baseUrl, true)
-      await provider?.setApiKeyForTesting(apiKey)
-      await provider?.forceRefresh(false)
-    },
-    async models() {
-      return await provider?.forceRefresh(false) ?? []
-    },
-    async request(modelId, prompt, reasoningEffort) {
-      const model = (await provider?.forceRefresh(false))?.find(candidate => candidate.id === modelId)
-      if (provider === undefined || model === undefined)
-        throw new Error(`Model ${modelId} is unavailable.`)
-      const parts: string[] = []
-      const token = new CancellationTokenSource()
-      try {
-        await provider.provideLanguageModelChatResponse(
-          model,
-          [{
-            role: LanguageModelChatMessageRole.User,
-            content: [new LanguageModelTextPart(prompt)],
-            name: undefined,
-          }],
-          {
-            requestInitiator: 'maxdewald.modelprovider.integration-test',
-            toolMode: LanguageModelChatToolMode.Auto,
-            ...(reasoningEffort === undefined ? {} : { modelConfiguration: { reasoningEffort } }),
-          },
-          {
-            report(value) {
-              if (value instanceof LanguageModelTextPart)
-                parts.push(value.value)
-            },
-          },
-          token.token,
-        )
-      }
-      finally {
-        token.dispose()
-      }
-      return parts.join('')
-    },
-    async countTokens(modelId, value) {
-      const model = (await provider?.forceRefresh(false))?.find(candidate => candidate.id === modelId)
-      if (provider === undefined || model === undefined)
-        throw new Error(`Model ${modelId} is unavailable.`)
-      const token = new CancellationTokenSource()
-      try {
-        return await provider.provideTokenCount(model, value, token.token)
-      }
-      finally {
-        token.dispose()
-      }
-    },
-  }
 }

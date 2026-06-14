@@ -5,8 +5,9 @@ Expose the chat-capable models from a local
 Copilot Chat.
 
 The extension discovers models from CLIProxyAPI, enriches them with context,
-output, tool, image, and reasoning metadata, and refreshes the list while VS
-Code is running. Models with multiple reasoning levels use VS Code's native
+output, tool, image, and reasoning metadata, and refreshes the list on startup
+and when the local CLIProxyAPI configuration changes. Models with multiple
+reasoning levels use VS Code's native
 **Thinking Effort** selector; they are not duplicated into separate model
 entries.
 
@@ -14,11 +15,11 @@ entries.
 
 - CLIProxyAPI running and reachable, by default at `http://127.0.0.1:8317`
 - A CLIProxyAPI API key
-- VS Code Insiders 1.125 or newer
+- VS Code 1.124 or newer
 - GitHub Copilot Chat
 
-This extension uses the proposed `chatProvider@5` and
-`languageModelThinkingPart@1` APIs. Proposed API extensions must be installed
+This extension uses the proposed `chatProvider` and
+`languageModelThinkingPart` APIs. Proposed API extensions must be installed
 from a VSIX and cannot be published as ordinary Marketplace extensions.
 
 ## Setup
@@ -26,12 +27,19 @@ from a VSIX and cannot be published as ordinary Marketplace extensions.
 1. Start CLIProxyAPI and complete the provider login flow there.
 2. Build and package this extension with `pnpm install && pnpm ext:package`.
 3. Install the generated VSIX in VS Code Insiders.
-4. Run **CLIProxyAPI: Import API Key from Config** and confirm the import, or
-   run **CLIProxyAPI: Configure Connection** and enter the key when prompted.
+4. Start the Extension Development Host or restart VS Code. When the extension
+   finds a local config, use the bottom **Import API Key** notification action.
+   If no config is found, use its **Configure Connection** action instead.
 5. Open Copilot Chat and choose a model under the **CLIProxyAPI** provider.
 
 The API key is stored in VS Code `SecretStorage`. The extension never starts or
-stops CLIProxyAPI itself.
+stops CLIProxyAPI itself. Model discovery runs immediately at startup when a key
+is already stored.
+
+For local instances, the extension watches `config.yaml` and the configured
+`auth-dir` for credential changes and refreshes models after a short debounce.
+CLIProxyAPI does not expose its internal model-registry events over HTTP, so
+remote instances can be refreshed through the command or a settings change.
 
 ## Model Metadata
 
@@ -58,7 +66,6 @@ server-side usage is still reported by CLIProxyAPI after a response.
 | `modelProvider.baseUrl`                | Base URL of the CLIProxyAPI server.                                                   | `string`  | `"http://127.0.0.1:8317"` |
 | `modelProvider.configPath`             | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery. | `string`  | `""`                      |
 | `modelProvider.autoDetectConfig`       | Search common local CLIProxyAPI config locations when no config path is set.          | `boolean` | `true`                    |
-| `modelProvider.refreshIntervalSeconds` | How often to refresh the proxy model list.                                            | `number`  | `60`                      |
 | `modelProvider.defaultMaxOutputTokens` | Fallback output-token limit when CLIProxyAPI provides no model-specific value.        | `number`  | `16384`                   |
 
 <!-- configs -->

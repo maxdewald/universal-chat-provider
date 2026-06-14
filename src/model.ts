@@ -1,4 +1,5 @@
 import type { LanguageModelChatInformation, LanguageModelConfigurationSchema } from 'vscode'
+import { capitalize, isPlainObject, unique } from 'moderndash'
 
 export interface ProxyModelListEntry {
   id: string
@@ -72,14 +73,14 @@ const LEVEL_DESCRIPTIONS: Record<string, string> = {
 
 export function flattenCatalog(payload: unknown): Map<string, CatalogModel> {
   const result = new Map<string, CatalogModel>()
-  if (!isRecord(payload))
+  if (!isPlainObject(payload))
     return result
 
   for (const value of Object.values(payload)) {
     if (!Array.isArray(value))
       continue
     for (const candidate of value) {
-      if (!isRecord(candidate) || typeof candidate.id !== 'string')
+      if (!isPlainObject(candidate) || typeof candidate.id !== 'string')
         continue
       const current = result.get(candidate.id)
       const model = candidate as unknown as CatalogModel
@@ -170,7 +171,7 @@ function resolveReasoning(
   const describedLevels = metadata?.supported_reasoning_levels
     ?.map(item => item.effort.trim().toLowerCase())
     .filter(Boolean)
-  let levels = unique(describedLevels ?? catalog?.thinking?.levels ?? [])
+  let levels = normalizedUnique(describedLevels ?? catalog?.thinking?.levels ?? [])
 
   if (levels.length === 0 && catalog?.thinking) {
     if (catalog.thinking.zero_allowed)
@@ -179,7 +180,7 @@ function resolveReasoning(
       levels.push('auto')
     if ((catalog.thinking.max ?? 0) > 0)
       levels.push('low', 'medium', 'high')
-    levels = unique(levels)
+    levels = normalizedUnique(levels)
   }
 
   if (levels.length < 2)
@@ -248,7 +249,7 @@ function formatTokens(value: number): string {
 function formatLevel(value: string): string {
   return value === 'xhigh'
     ? 'Extra High'
-    : value.charAt(0).toUpperCase() + value.slice(1)
+    : capitalize(value)
 }
 
 function inferFamily(id: string): string {
@@ -266,10 +267,6 @@ function positiveInteger(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback
 }
 
-function unique(values: readonly string[]): string[] {
-  return [...new Set(values.map(value => value.trim().toLowerCase()).filter(Boolean))]
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+function normalizedUnique(values: readonly string[]): string[] {
+  return unique(values.map(value => value.trim().toLowerCase()).filter(Boolean))
 }

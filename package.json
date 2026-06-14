@@ -94,13 +94,6 @@
           "default": true,
           "description": "Search common local CLIProxyAPI config locations when no config path is set."
         },
-        "modelProvider.refreshIntervalSeconds": {
-          "type": "number",
-          "default": 60,
-          "minimum": 15,
-          "maximum": 3600,
-          "description": "How often to refresh the proxy model list."
-        },
         "modelProvider.defaultMaxOutputTokens": {
           "type": "number",
           "default": 16384,
@@ -118,10 +111,10 @@
     "vscode:dts": "dts main && dts dev",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:integration": "node tools/run-integration.mjs",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "check": "pnpm lint && pnpm typecheck && pnpm test:coverage && pnpm build",
     "vscode:prepublish": "pnpm build",
     "release": "bumpp",
     "ext:package": "vsce package --no-dependencies",
@@ -129,13 +122,15 @@
   },
   "dependencies": {
     "js-tiktoken": "^1.0.21",
+    "moderndash": "^4.0.2",
+    "untildify": "^6.0.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^9.0.0",
     "@types/node": "^24.13.2",
+    "@vitest/coverage-v8": "^4.1.8",
     "@vscode/dts": "^0.4.1",
-    "@vscode/test-electron": "3.0.0",
     "@vscode/vsce": "^3.9.2",
     "bumpp": "^11.1.0",
     "eslint": "^10.5.0",

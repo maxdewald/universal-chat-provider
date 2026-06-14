@@ -26,4 +26,29 @@ describe('server-sent event parser', () => {
       },
     ])
   })
+
+  it('handles a CRLF boundary split across chunks and a final unterminated event', async () => {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: first\r'))
+        controller.enqueue(encoder.encode('\n\r\ndata: second\r'))
+        controller.close()
+      },
+    })
+
+    const events = []
+    for await (const event of parseServerSentEvents(stream))
+      events.push(event)
+
+    expect(events).toEqual([{ data: 'first' }, { data: 'second' }])
+  })
+
+  it('ignores blocks without data', async () => {
+    const stream = new Response('event: ping\n\n: comment\n\n').body!
+    const events = []
+    for await (const event of parseServerSentEvents(stream))
+      events.push(event)
+    expect(events).toEqual([])
+  })
 })
