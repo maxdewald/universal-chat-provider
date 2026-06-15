@@ -114,7 +114,7 @@ export class CommitMessageService {
         return
 
       const instructions = workspace
-        .getConfiguration('modelProvider', repository.rootUri)
+        .getConfiguration('universalChatProvider', repository.rootUri)
         .get<string>('commitMessage.instructions', '')
         .trim()
       const branch = repository.state.HEAD?.name
@@ -163,7 +163,7 @@ export class CommitMessageService {
       return undefined
     }
 
-    const settings = workspace.getConfiguration('modelProvider')
+    const settings = workspace.getConfiguration('universalChatProvider')
     const configuredId = settings.get<string>('commitMessage.model', '').trim()
     const configuredModel = models.find(model => model.id === configuredId)
     if (!forcePicker && configuredModel !== undefined)

@@ -36,7 +36,7 @@ describe('commit message service', () => {
     const selectedModel = model('commit-model', 'Commit Model')
     const provider = providerMock([model('chat-model', 'Chat Model'), selectedModel])
     provider.completeText.mockResolvedValue('```text\nfeat: add commit generation\n```')
-    vscodeMock.settings.set('modelProvider.commitMessage.model', selectedModel.id)
+    vscodeMock.settings.set('universalChatProvider.commitMessage.model', selectedModel.id)
 
     await new CommitMessageService(provider).generate(
       root,
@@ -86,7 +86,7 @@ describe('commit message service', () => {
     })
 
     await expect(new CommitMessageService(provider).selectModel()).resolves.toBe(second)
-    expect(vscodeMock.settings.get('modelProvider.commitMessage.model')).toBe('second')
+    expect(vscodeMock.settings.get('universalChatProvider.commitMessage.model')).toBe('second')
 
     resetVSCodeMock()
     const root = Uri.file('/repo')
@@ -98,7 +98,7 @@ describe('commit message service', () => {
 
     await new CommitMessageService(soleProvider).generate(root)
 
-    expect(vscodeMock.settings.get('modelProvider.commitMessage.model')).toBe('first')
+    expect(vscodeMock.settings.get('universalChatProvider.commitMessage.model')).toBe('first')
     expect(window.showQuickPick).not.toHaveBeenCalled()
   })
 
@@ -110,7 +110,7 @@ describe('commit message service', () => {
     const current = model('current', 'Current')
     const provider = providerMock([current, model('other', 'Other')])
     provider.completeText.mockResolvedValue('fix: select current model')
-    vscodeMock.settings.set('modelProvider.commitMessage.model', 'removed')
+    vscodeMock.settings.set('universalChatProvider.commitMessage.model', 'removed')
     window.showQuickPick.mockImplementationOnce(async (items) => {
       const choices = items as ReadonlyArray<{ model: ProviderModel }>
       return choices[0]
@@ -119,7 +119,7 @@ describe('commit message service', () => {
     await new CommitMessageService(provider).generate(root)
 
     expect(window.showQuickPick).toHaveBeenCalledTimes(1)
-    expect(vscodeMock.settings.get('modelProvider.commitMessage.model')).toBe('current')
+    expect(vscodeMock.settings.get('universalChatProvider.commitMessage.model')).toBe('current')
     expect(provider.completeText).toHaveBeenCalledWith(
       current,
       expect.any(String),

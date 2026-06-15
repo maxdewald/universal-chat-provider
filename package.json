@@ -1,7 +1,7 @@
 {
   "publisher": "maxdewald",
-  "name": "modelprovider",
-  "displayName": "CLIProxyAPI Model Provider",
+  "name": "universal-chat-provider",
+  "displayName": "Universal Chat Provider",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -13,13 +13,13 @@
   "description": "Expose CLIProxyAPI models in GitHub Copilot Chat.",
   "author": "Maximilian Dewald <maximilian@dewald.one>",
   "license": "MIT",
-  "homepage": "https://github.com/maxdewald/modelprovider#readme",
+  "homepage": "https://github.com/maxdewald/universal-chat-provider#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/maxdewald/modelprovider.git"
+    "url": "https://github.com/maxdewald/universal-chat-provider.git"
   },
   "bugs": {
-    "url": "https://github.com/maxdewald/modelprovider/issues"
+    "url": "https://github.com/maxdewald/universal-chat-provider/issues"
   },
   "categories": [
     "Other"
@@ -46,85 +46,123 @@
   "contributes": {
     "languageModelChatProviders": [
       {
-        "vendor": "cliproxyapi",
-        "displayName": "CLIProxyAPI"
+        "vendor": "universal-chat-provider",
+        "displayName": "Universal Chat Provider"
       }
     ],
     "commands": [
       {
-        "command": "modelProvider.manage",
-        "title": "CLIProxyAPI: Manage Provider"
+        "command": "universalChatProvider.manage",
+        "title": "Universal Chat Provider: Manage Provider"
       },
       {
-        "command": "modelProvider.configure",
-        "title": "CLIProxyAPI: Configure Connection"
+        "command": "universalChatProvider.login",
+        "title": "Universal Chat Provider: Add Account (Login)"
       },
       {
-        "command": "modelProvider.importConfig",
-        "title": "CLIProxyAPI: Import API Key from Config"
+        "command": "universalChatProvider.manageAccounts",
+        "title": "Universal Chat Provider: Manage Accounts"
       },
       {
-        "command": "modelProvider.refresh",
-        "title": "CLIProxyAPI: Refresh Models"
+        "command": "universalChatProvider.restartServer",
+        "title": "Universal Chat Provider: Restart Managed Server"
       },
       {
-        "command": "modelProvider.generateCommitMessage",
-        "title": "CLIProxyAPI: Generate Commit Message",
+        "command": "universalChatProvider.updateBinary",
+        "title": "Universal Chat Provider: Update Proxy Binary"
+      },
+      {
+        "command": "universalChatProvider.resetServer",
+        "title": "Universal Chat Provider: Reset Managed Server"
+      },
+      {
+        "command": "universalChatProvider.configure",
+        "title": "Universal Chat Provider: Configure Connection"
+      },
+      {
+        "command": "universalChatProvider.importConfig",
+        "title": "Universal Chat Provider: Import API Key from Config"
+      },
+      {
+        "command": "universalChatProvider.refresh",
+        "title": "Universal Chat Provider: Refresh Models"
+      },
+      {
+        "command": "universalChatProvider.generateCommitMessage",
+        "title": "Universal Chat Provider: Generate Commit Message",
         "icon": "$(sparkle)"
       },
       {
-        "command": "modelProvider.selectCommitMessageModel",
-        "title": "CLIProxyAPI: Select Commit Message Model"
+        "command": "universalChatProvider.selectCommitMessageModel",
+        "title": "Universal Chat Provider: Select Commit Message Model"
       },
       {
-        "command": "modelProvider.clearCredentials",
-        "title": "CLIProxyAPI: Clear Stored API Key"
+        "command": "universalChatProvider.clearCredentials",
+        "title": "Universal Chat Provider: Clear Stored API Key"
       },
       {
-        "command": "modelProvider.showLogs",
-        "title": "CLIProxyAPI: Show Logs"
+        "command": "universalChatProvider.showLogs",
+        "title": "Universal Chat Provider: Show Logs"
       }
     ],
     "menus": {
       "scm/inputBox": [
         {
-          "command": "modelProvider.generateCommitMessage",
+          "command": "universalChatProvider.generateCommitMessage",
           "when": "scmProvider == git"
         }
       ]
     },
     "configuration": {
       "type": "object",
-      "title": "CLIProxyAPI Model Provider",
+      "title": "Universal Chat Provider",
       "properties": {
-        "modelProvider.baseUrl": {
+        "universalChatProvider.server.mode": {
+          "type": "string",
+          "enum": [
+            "managed",
+            "external"
+          ],
+          "enumDescriptions": [
+            "Download and supervise a bundled CLIProxyAPI server automatically.",
+            "Connect to a CLIProxyAPI server you start yourself (uses Base URL and your own API key)."
+          ],
+          "default": "managed",
+          "description": "How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance."
+        },
+        "universalChatProvider.server.version": {
+          "type": "string",
+          "default": "7.2.5",
+          "description": "CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases."
+        },
+        "universalChatProvider.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8317",
-          "description": "Base URL of the CLIProxyAPI server."
+          "description": "Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port."
         },
-        "modelProvider.configPath": {
+        "universalChatProvider.configPath": {
           "type": "string",
           "default": "",
           "description": "Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery."
         },
-        "modelProvider.autoDetectConfig": {
+        "universalChatProvider.autoDetectConfig": {
           "type": "boolean",
           "default": true,
           "description": "Search common local CLIProxyAPI config locations when no config path is set."
         },
-        "modelProvider.defaultMaxOutputTokens": {
+        "universalChatProvider.defaultMaxOutputTokens": {
           "type": "number",
           "default": 16384,
           "minimum": 1024,
           "description": "Fallback output-token limit when CLIProxyAPI provides no model-specific value."
         },
-        "modelProvider.commitMessage.model": {
+        "universalChatProvider.commitMessage.model": {
           "type": "string",
           "default": "",
           "scope": "machine",
           "description": "Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models."
         },
-        "modelProvider.commitMessage.instructions": {
+        "universalChatProvider.commitMessage.instructions": {
           "type": "string",
           "default": "",
           "scope": "resource",

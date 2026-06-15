@@ -55,6 +55,40 @@ describe('local CLIProxyAPI config', () => {
     })
   })
 
+  it('reads a plaintext management key and port, ignoring hashed keys', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = join(directory, 'config.yaml')
+    await writeFile(configPath, [
+      'port: 9001',
+      'auth-dir: auth',
+      'api-keys:',
+      '  - actual-key',
+      'remote-management:',
+      '  secret-key: super-secret',
+    ].join('\n'))
+
+    await expect(readLocalProxyConfig(configPath)).resolves.toEqual({
+      path: configPath,
+      apiKey: 'actual-key',
+      authDir: join(directory, 'auth'),
+      managementKey: 'super-secret',
+      port: 9001,
+    })
+  })
+
+  it('ignores a bcrypt-hashed management secret', async () => {
+    const directory = await temporaryDirectory()
+    const configPath = join(directory, 'config.yaml')
+    await writeFile(configPath, [
+      'auth-dir: auth',
+      'remote-management:',
+      '  secret-key: "$2a$10$abcdefghijklmnopqrstuv"',
+    ].join('\n'))
+
+    const config = await readLocalProxyConfig(configPath)
+    expect(config.managementKey).toBeUndefined()
+  })
+
   it('rejects malformed YAML', async () => {
     const directory = await temporaryDirectory()
     const configPath = join(directory, 'config.yaml')
@@ -65,7 +99,7 @@ describe('local CLIProxyAPI config', () => {
 })
 
 async function temporaryDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'modelprovider-config-'))
+  const directory = await mkdtemp(join(tmpdir(), 'universal-chat-provider-config-'))
   tempDirectories.push(directory)
   return directory
 }

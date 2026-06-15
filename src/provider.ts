@@ -26,7 +26,27 @@ import { CLIProxyClient, ProxyHttpError } from './proxy-client'
 import { buildRequest, buildTextRequest } from './request'
 import { countTokens } from './tokenizer'
 
-export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<ProviderModel> {
+/**
+ * Resolves the proxy connection. The default reads user settings (the external
+ * BYO server); the managed controller implements the same shape and additionally
+ * starts/supervises a bundled server before reporting its URL.
+ */
+export interface ProxyConnection {
+  ensureReady: (interactive: boolean) => Promise<void>
+  baseUrl: () => string
+}
+
+class SettingsConnection implements ProxyConnection {
+  async ensureReady(): Promise<void> {}
+
+  baseUrl(): string {
+    return normalizeBaseUrl(
+      workspace.getConfiguration('universalChatProvider').get<string>('baseUrl', 'http://127.0.0.1:8317'),
+    )
+  }
+}
+
+export class UniversalChatProvider implements LanguageModelChatProvider<ProviderModel> {
   private readonly changeEmitter = new EventEmitter<void>()
   private readonly credentials: CredentialStore
   private cachedModels: ProviderModel[] = []
@@ -40,6 +60,7 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   constructor(
     context: ExtensionContext,
     private readonly output: OutputChannel,
+    private readonly connection: ProxyConnection = new SettingsConnection(),
   ) {
     this.credentials = new CredentialStore(context)
   }
@@ -49,6 +70,7 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   }
 
   async initialize(): Promise<void> {
+    await this.connection.ensureReady(false)
     if (await this.credentials.get() === undefined) {
       await this.showOnboarding()
       return
@@ -72,13 +94,14 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     progress: Progress<LanguageModelResponsePart2>,
     token: CancellationToken,
   ): Promise<void> {
+    await this.connection.ensureReady(false)
     const apiKey = await this.credentials.get()
     if (apiKey === undefined)
       throw LanguageModelError.NoPermissions('Configure a CLIProxyAPI API key first.')
 
     const controller = new AbortController()
     const cancellation = token.onCancellationRequested(() => controller.abort())
-    const client = new CLIProxyClient(this.baseUrl(), apiKey)
+    const client = new CLIProxyClient(this.connection.baseUrl(), apiKey)
     const reasoningEffort = stringValue(options.modelConfiguration?.reasoningEffort)
 
     try {
@@ -138,13 +161,14 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     if (token?.isCancellationRequested)
       return undefined
 
+    await this.connection.ensureReady(false)
     const apiKey = await this.credentials.get()
     if (apiKey === undefined)
       throw LanguageModelError.NoPermissions('Configure a CLIProxyAPI API key first.')
 
     const controller = new AbortController()
     const cancellation = token?.onCancellationRequested(() => controller.abort())
-    const client = new CLIProxyClient(this.baseUrl(), apiKey)
+    const client = new CLIProxyClient(this.connection.baseUrl(), apiKey)
     let text = ''
 
     try {
@@ -204,6 +228,7 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   }
 
   private async doRefresh(interactive: boolean, token?: CancellationToken): Promise<ProviderModel[]> {
+    await this.connection.ensureReady(interactive)
     let apiKey = await this.credentials.get()
     if (apiKey === undefined && interactive)
       apiKey = await this.acquireApiKey()
@@ -213,9 +238,9 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
     const controller = new AbortController()
     const cancellation = token?.onCancellationRequested(() => controller.abort())
     try {
-      const client = new CLIProxyClient(this.baseUrl(), apiKey)
+      const client = new CLIProxyClient(this.connection.baseUrl(), apiKey)
       const discovery = await client.discover(controller.signal)
-      const settings = workspace.getConfiguration('modelProvider')
+      const settings = workspace.getConfiguration('universalChatProvider')
       const models = mapProxyModels(discovery.available, discovery.metadata, discovery.catalog, {
         defaultMaxOutputTokens: settings.get<number>('defaultMaxOutputTokens', 16_384),
       })
@@ -226,7 +251,7 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
         this.changeEmitter.fire()
       }
       this.credentialRecoveryShown = false
-      this.output.appendLine(`Discovered ${models.length} CLIProxyAPI chat models at ${this.baseUrl()}.`)
+      this.output.appendLine(`Discovered ${models.length} CLIProxyAPI chat models at ${this.connection.baseUrl()}.`)
       return this.cachedModels
     }
     catch (error) {
@@ -246,12 +271,6 @@ export class CLIProxyLanguageModelProvider implements LanguageModelChatProvider<
   private async acquireApiKey(): Promise<string | undefined> {
     await this.showOnboarding()
     return this.credentials.get()
-  }
-
-  private baseUrl(): string {
-    return normalizeBaseUrl(
-      workspace.getConfiguration('modelProvider').get<string>('baseUrl', 'http://127.0.0.1:8317'),
-    )
   }
 
   private async showOnboarding(force = false): Promise<void> {

@@ -61,11 +61,32 @@ export enum LanguageModelChatToolMode {
 
 export enum ConfigurationTarget {
   Global = 1,
+  Workspace = 2,
+}
+
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2,
+}
+
+export enum ProgressLocation {
+  Notification = 15,
+}
+
+export class RelativePattern {
+  constructor(
+    readonly base: unknown,
+    readonly pattern: string,
+  ) {}
 }
 
 export class Uri {
   static file(fsPath: string): Uri {
     return new Uri('file', fsPath)
+  }
+
+  static parse(value: string): Uri {
+    return new Uri('parsed', value)
   }
 
   readonly path: string
@@ -158,8 +179,27 @@ export const vscodeMock = {
   },
 }
 
+export const statusBarItem = {
+  text: '',
+  tooltip: '' as string | undefined,
+  command: undefined as string | undefined,
+  show: vi.fn(),
+  hide: vi.fn(),
+  dispose: vi.fn(),
+}
+
+function createWatcher(): { onDidCreate: () => MockDisposable, onDidChange: () => MockDisposable, onDidDelete: () => MockDisposable, dispose: () => void } {
+  return {
+    onDidCreate: () => new MockDisposable(),
+    onDidChange: () => new MockDisposable(),
+    onDidDelete: () => new MockDisposable(),
+    dispose: () => {},
+  }
+}
+
 export const window = {
   createOutputChannel: vi.fn((_name?: string, _options?: unknown) => vscodeMock.output),
+  createStatusBarItem: vi.fn((_alignment?: number, _priority?: number) => statusBarItem),
   showInformationMessage: vi.fn(async (_message?: string, ..._items: unknown[]) => undefined as string | undefined),
   showWarningMessage: vi.fn(async (_message?: string, ..._items: unknown[]) => undefined as string | undefined),
   showErrorMessage: vi.fn(async (_message?: string, ..._items: unknown[]) => undefined as string | undefined),
@@ -167,6 +207,8 @@ export const window = {
     undefined as string | undefined),
   showQuickPick: vi.fn(async (_items?: unknown, _options?: unknown): Promise<unknown> =>
     undefined),
+  withProgress: vi.fn(async (_options: unknown, task: (progress: unknown, token: unknown) => unknown) =>
+    task({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: () => new MockDisposable() })),
 }
 
 export const workspace = {
@@ -179,10 +221,15 @@ export const workspace = {
       settings.set(`${section}.${key}`, value)
     },
   })),
+  createFileSystemWatcher: vi.fn((_pattern: unknown) => createWatcher()),
   fs: {
     stat: vi.fn(async (_uri: Uri) => ({ size: 0 })),
     readFile: vi.fn(async (_uri: Uri) => new Uint8Array()),
   },
+}
+
+export const env = {
+  openExternal: vi.fn(async (_uri: Uri) => true),
 }
 
 export const extensions = {
@@ -217,6 +264,15 @@ export function resetVSCodeMock(): void {
   for (const value of Object.values(window))
     value.mockReset()
   window.createOutputChannel.mockReturnValue(vscodeMock.output)
+  window.createStatusBarItem.mockReturnValue(statusBarItem)
+  window.withProgress.mockImplementation(async (_options, task) =>
+    task({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: () => new MockDisposable() }))
+  statusBarItem.text = ''
+  statusBarItem.tooltip = ''
+  statusBarItem.command = undefined
+  statusBarItem.show.mockClear()
+  statusBarItem.hide.mockClear()
+  statusBarItem.dispose.mockClear()
   for (const value of Object.values(workspace)) {
     if ('mockClear' in value) {
       value.mockClear()
@@ -226,6 +282,8 @@ export function resetVSCodeMock(): void {
   workspace.fs.readFile.mockReset()
   workspace.fs.stat.mockResolvedValue({ size: 0 })
   workspace.fs.readFile.mockResolvedValue(new Uint8Array())
+  env.openExternal.mockReset()
+  env.openExternal.mockResolvedValue(true)
   extensions.getExtension.mockReset()
   for (const value of Object.values(commands))
     value.mockClear()

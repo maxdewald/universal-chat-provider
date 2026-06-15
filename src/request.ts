@@ -58,7 +58,7 @@ export function buildPromptCacheKey(
     return undefined
 
   const hash = createHash('sha256')
-    .update('modelprovider:prompt-cache:v1\0')
+    .update('universal-chat-provider:prompt-cache:v1\0')
     .update(model.proxyModelId)
     .update('\0')
     .update(requestInitiator ?? '')
@@ -66,7 +66,7 @@ export function buildPromptCacheKey(
     .update(seed)
     .digest('hex')
     .slice(0, 32)
-  return `modelprovider-${hash}`
+  return `universal-chat-provider-${hash}`
 }
 
 export function buildTextRequest(

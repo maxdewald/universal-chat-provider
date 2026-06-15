@@ -29,16 +29,16 @@ const controllers = new Set<AbortController>()
 
 beforeAll(async () => {
   const baseUrl = normalizeBaseUrl(
-    environmentValue('MODELPROVIDER_E2E_BASE_URL') ?? DEFAULT_BASE_URL,
+    environmentValue('UNIVERSAL_CHAT_PROVIDER_E2E_BASE_URL') ?? DEFAULT_BASE_URL,
   )
-  const configuredPath = environmentValue('MODELPROVIDER_E2E_CONFIG_PATH')
+  const configuredPath = environmentValue('UNIVERSAL_CHAT_PROVIDER_E2E_CONFIG_PATH')
   const configPath = configuredPath !== undefined
     ? resolve(untildify(configuredPath))
     : await findConfigPath()
 
   if (configPath === undefined) {
     throw new Error(
-      'No CLIProxyAPI config.yaml was found. Set MODELPROVIDER_E2E_CONFIG_PATH or use a standard local config path.',
+      'No CLIProxyAPI config.yaml was found. Set UNIVERSAL_CHAT_PROVIDER_E2E_CONFIG_PATH or use a standard local config path.',
     )
   }
 
@@ -54,7 +54,7 @@ beforeAll(async () => {
   try {
     if (!await client.health(healthController.signal)) {
       throw new Error(
-        `CLIProxyAPI is unavailable at ${baseUrl}. Start the server or set MODELPROVIDER_E2E_BASE_URL.`,
+        `CLIProxyAPI is unavailable at ${baseUrl}. Start the server or set UNIVERSAL_CHAT_PROVIDER_E2E_BASE_URL.`,
       )
     }
   }
@@ -93,7 +93,7 @@ describe.sequential('live CLIProxyAPI providers', () => {
   it('streams a sentinel response from the OpenAI subscription', async () => {
     await expectSentinel(
       'OpenAI',
-      environmentValue('MODELPROVIDER_E2E_OPENAI_MODEL') ?? DEFAULT_OPENAI_MODEL,
+      environmentValue('UNIVERSAL_CHAT_PROVIDER_E2E_OPENAI_MODEL') ?? DEFAULT_OPENAI_MODEL,
       'MODELP_PROVIDER_OPENAI_OK',
     )
   })
@@ -101,7 +101,7 @@ describe.sequential('live CLIProxyAPI providers', () => {
   it('streams a sentinel response from the Gemini subscription', async () => {
     await expectSentinel(
       'Gemini',
-      environmentValue('MODELPROVIDER_E2E_GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL,
+      environmentValue('UNIVERSAL_CHAT_PROVIDER_E2E_GEMINI_MODEL') ?? DEFAULT_GEMINI_MODEL,
       'MODELP_PROVIDER_GEMINI_OK',
     )
   })
@@ -113,7 +113,7 @@ async function expectSentinel(provider: string, modelId: string, sentinel: strin
     const available = context.models.map(model => model.proxyModelId).sort().join(', ')
     throw new Error(
       `${provider} E2E model "${modelId}" was not discovered. `
-      + `Set MODELPROVIDER_E2E_${provider.toUpperCase()}_MODEL to an available model. `
+      + `Set UNIVERSAL_CHAT_PROVIDER_E2E_${provider.toUpperCase()}_MODEL to an available model. `
       + `Discovered models: ${available || '(none)'}`,
     )
   }
@@ -132,7 +132,7 @@ async function expectSentinel(provider: string, modelId: string, sentinel: strin
       name: undefined,
     }],
     {
-      requestInitiator: 'modelprovider-e2e',
+      requestInitiator: 'universal-chat-provider-e2e',
       toolMode: LanguageModelChatToolMode.Auto,
     },
     'low',

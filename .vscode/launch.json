@@ -9,7 +9,7 @@
       "args": [
         "${workspaceFolder}/.vscode/extension-dev.code-workspace",
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--enable-proposed-api=maxdewald.modelprovider"
+        "--enable-proposed-api=maxdewald.universal-chat-provider"
       ],
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"

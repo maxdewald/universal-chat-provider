@@ -7,7 +7,7 @@ import untildify from 'untildify'
 import { ConfigurationTarget, window, workspace } from 'vscode'
 import { readLocalProxyConfig } from './local-config'
 
-const SECRET_KEY = 'cliproxyapi.apiKey'
+export const SECRET_KEY = 'universalChatProvider.apiKey'
 
 export class CredentialStore {
   constructor(private readonly context: ExtensionContext) {}
@@ -85,7 +85,7 @@ export async function findConfigPath(): Promise<string | undefined> {
 }
 
 export function configCandidates(): string[] {
-  const settings = workspace.getConfiguration('modelProvider')
+  const settings = workspace.getConfiguration('universalChatProvider')
   const configured = settings.get<string>('configPath', '').trim()
   if (configured.length > 0) {
     const expanded = untildify(configured)
@@ -101,7 +101,7 @@ export function configCandidates(): string[] {
 }
 
 export async function configureConnection(): Promise<boolean> {
-  const settings = workspace.getConfiguration('modelProvider')
+  const settings = workspace.getConfiguration('universalChatProvider')
   const baseUrl = await window.showInputBox({
     title: 'CLIProxyAPI Base URL',
     value: settings.get<string>('baseUrl', 'http://127.0.0.1:8317'),

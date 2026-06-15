@@ -2,7 +2,7 @@ import type { ExtensionContext } from 'vscode'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CommitMessageService } from '../src/commit-message'
 import { activate, deactivate } from '../src/index'
-import { CLIProxyLanguageModelProvider } from '../src/provider'
+import { UniversalChatProvider } from '../src/provider'
 import {
   commands,
   resetVSCodeMock,
@@ -17,25 +17,25 @@ beforeEach(() => {
 
 describe('extension activation', () => {
   it('registers the provider, commands, and startup initialization', async () => {
-    const initialize = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'initialize').mockResolvedValue()
-    const configure = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'configure').mockResolvedValue()
-    const importConfig = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'importConfig').mockResolvedValue()
-    const forceRefresh = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'forceRefresh').mockResolvedValue([])
+    const initialize = vi.spyOn(UniversalChatProvider.prototype, 'initialize').mockResolvedValue()
+    const configure = vi.spyOn(UniversalChatProvider.prototype, 'configure').mockResolvedValue()
+    const importConfig = vi.spyOn(UniversalChatProvider.prototype, 'importConfig').mockResolvedValue()
+    const forceRefresh = vi.spyOn(UniversalChatProvider.prototype, 'forceRefresh').mockResolvedValue([])
     const generateCommitMessage = vi.spyOn(CommitMessageService.prototype, 'generate').mockResolvedValue()
     const selectCommitMessageModel = vi.spyOn(CommitMessageService.prototype, 'selectModel').mockResolvedValue(undefined)
     const context = extensionContext()
 
     expect(activate(context)).toBeUndefined()
-    expect(vscodeMock.registeredProviders[0]).toMatchObject({ vendor: 'cliproxyapi' })
-    expect(vscodeMock.commandHandlers.size).toBe(8)
-    expect(context.subscriptions).toHaveLength(11)
+    expect(vscodeMock.registeredProviders[0]).toMatchObject({ vendor: 'universal-chat-provider' })
+    expect(vscodeMock.commandHandlers.size).toBe(13)
+    expect(context.subscriptions).toHaveLength(18)
     expect(initialize).toHaveBeenCalledTimes(1)
 
-    await commands.executeCommand('modelProvider.configure')
-    await commands.executeCommand('modelProvider.importConfig')
-    await commands.executeCommand('modelProvider.refresh')
-    await commands.executeCommand('modelProvider.generateCommitMessage')
-    await commands.executeCommand('modelProvider.selectCommitMessageModel')
+    await commands.executeCommand('universalChatProvider.configure')
+    await commands.executeCommand('universalChatProvider.importConfig')
+    await commands.executeCommand('universalChatProvider.refresh')
+    await commands.executeCommand('universalChatProvider.generateCommitMessage')
+    await commands.executeCommand('universalChatProvider.selectCommitMessageModel')
     expect(configure).toHaveBeenCalled()
     expect(importConfig).toHaveBeenCalled()
     expect(forceRefresh).toHaveBeenCalledWith(true)
@@ -45,20 +45,20 @@ describe('extension activation', () => {
   })
 
   it('dispatches management choices and confirms credential clearing', async () => {
-    vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'initialize').mockResolvedValue()
-    const clearCredentials = vi.spyOn(CLIProxyLanguageModelProvider.prototype, 'clearCredentials').mockResolvedValue()
+    vi.spyOn(UniversalChatProvider.prototype, 'initialize').mockResolvedValue()
+    const clearCredentials = vi.spyOn(UniversalChatProvider.prototype, 'clearCredentials').mockResolvedValue()
     activate(extensionContext())
 
-    window.showQuickPick.mockResolvedValueOnce({ command: 'modelProvider.showLogs' })
-    await commands.executeCommand('modelProvider.manage')
+    window.showQuickPick.mockResolvedValueOnce({ command: 'universalChatProvider.showLogs' })
+    await commands.executeCommand('universalChatProvider.manage')
     expect(vscodeMock.output.show).toHaveBeenCalledWith(true)
 
     window.showWarningMessage.mockResolvedValueOnce(undefined)
-    await commands.executeCommand('modelProvider.clearCredentials')
+    await commands.executeCommand('universalChatProvider.clearCredentials')
     expect(clearCredentials).not.toHaveBeenCalled()
 
     window.showWarningMessage.mockResolvedValueOnce('Remove')
-    await commands.executeCommand('modelProvider.clearCredentials')
+    await commands.executeCommand('universalChatProvider.clearCredentials')
     expect(clearCredentials).toHaveBeenCalledTimes(1)
   })
 })

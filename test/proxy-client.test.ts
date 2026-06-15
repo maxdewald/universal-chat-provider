@@ -147,7 +147,7 @@ describe('cLIProxyClient', () => {
     const { CLIProxyClient } = await import('../src/proxy-client')
 
     await new CLIProxyClient('http://proxy', 'key').streamResponse(
-      { model: 'x', prompt_cache_key: 'modelprovider-cache-key' },
+      { model: 'x', prompt_cache_key: 'universal-chat-provider-cache-key' },
       callbacks(),
       new AbortController().signal,
     )
@@ -157,7 +157,7 @@ describe('cLIProxyClient', () => {
     expect(headers).toEqual({
       'Authorization': 'Bearer key',
       'Content-Type': 'application/json',
-      'Session_id': 'modelprovider-cache-key',
+      'Session_id': 'universal-chat-provider-cache-key',
     })
   })
 

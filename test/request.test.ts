@@ -146,7 +146,7 @@ describe('response request conversion', () => {
 
     const key = buildPromptCacheKey(model, firstTurn, 'test')
 
-    expect(key).toMatch(/^modelprovider-[a-f0-9]{32}$/)
+    expect(key).toMatch(/^universal-chat-provider-[a-f0-9]{32}$/)
     expect(buildPromptCacheKey(model, secondTurn, 'test')).toBe(key)
     expect(buildRequest(model, firstTurn, {
       requestInitiator: 'test',

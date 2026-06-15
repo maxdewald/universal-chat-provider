@@ -11,7 +11,7 @@ import {
   LanguageModelThinkingPart,
   LanguageModelToolCallPart,
 } from 'vscode'
-import { CLIProxyLanguageModelProvider } from '../src/provider'
+import { UniversalChatProvider } from '../src/provider'
 
 import { ProxyHttpError } from '../src/proxy-client'
 import { resetVSCodeMock, vscodeMock, window } from './support/vscode'
@@ -44,8 +44,8 @@ beforeEach(() => {
   resetVSCodeMock()
   clientMocks.discover.mockReset()
   clientMocks.streamResponse.mockReset()
-  vscodeMock.settings.set('modelProvider.autoDetectConfig', false)
-  vscodeMock.settings.set('modelProvider.baseUrl', 'http://proxy/')
+  vscodeMock.settings.set('universalChatProvider.autoDetectConfig', false)
+  vscodeMock.settings.set('universalChatProvider.baseUrl', 'http://proxy/')
 })
 
 describe('language model provider', () => {
@@ -251,8 +251,8 @@ describe('language model provider', () => {
     clientMocks.discover.mockResolvedValue(discovery())
 
     await provider.configure()
-    expect(vscodeMock.secrets.get('cliproxyapi.apiKey')).toBe('entered-key')
-    expect(vscodeMock.settings.get('modelProvider.baseUrl')).toBe('http://new-proxy')
+    expect(vscodeMock.secrets.get('universalChatProvider.apiKey')).toBe('entered-key')
+    expect(vscodeMock.settings.get('universalChatProvider.baseUrl')).toBe('http://new-proxy')
     expect(clientMocks.discover).toHaveBeenCalledTimes(1)
 
     await expect(provider.provideTokenCount(
@@ -277,7 +277,7 @@ describe('language model provider', () => {
     )).resolves.toHaveLength(1)
 
     expect(clientMocks.discover).toHaveBeenCalledTimes(1)
-    expect(vscodeMock.secrets.get('cliproxyapi.apiKey')).toBe('entered-key')
+    expect(vscodeMock.secrets.get('universalChatProvider.apiKey')).toBe('entered-key')
   })
 
   it('does nothing when connection configuration is cancelled', async () => {
@@ -314,9 +314,9 @@ describe('language model provider', () => {
   })
 })
 
-function createProvider(apiKey?: string): CLIProxyLanguageModelProvider {
+function createProvider(apiKey?: string): UniversalChatProvider {
   if (apiKey !== undefined)
-    vscodeMock.secrets.set('cliproxyapi.apiKey', apiKey)
+    vscodeMock.secrets.set('universalChatProvider.apiKey', apiKey)
   const context = {
     subscriptions: [],
     secrets: {
@@ -330,7 +330,7 @@ function createProvider(apiKey?: string): CLIProxyLanguageModelProvider {
       onDidChange: () => ({ dispose() {} }),
     },
   } as unknown as ExtensionContext
-  return new CLIProxyLanguageModelProvider(
+  return new UniversalChatProvider(
     context,
     vscodeMock.output as unknown as OutputChannel,
   )

@@ -26,17 +26,17 @@ describe('credentials', () => {
   it('normalizes URLs and resolves configured or default config candidates', () => {
     expect(normalizeBaseUrl(' https://proxy/// ')).toBe('https://proxy')
 
-    vscodeMock.settings.set('modelProvider.configPath', '~/custom.yaml')
+    vscodeMock.settings.set('universalChatProvider.configPath', '~/custom.yaml')
     expect(configCandidates()).toEqual([join(homedir(), 'custom.yaml')])
 
-    vscodeMock.settings.delete('modelProvider.configPath')
+    vscodeMock.settings.delete('universalChatProvider.configPath')
     expect(configCandidates()).toEqual([
       join(homedir(), 'cliproxyapi', 'config.yaml'),
       join(homedir(), '.config', 'cliproxyapi', 'config.yaml'),
       join(homedir(), '.cli-proxy-api', 'config.yaml'),
     ])
 
-    vscodeMock.settings.set('modelProvider.autoDetectConfig', false)
+    vscodeMock.settings.set('universalChatProvider.autoDetectConfig', false)
     expect(configCandidates()).toEqual([])
   })
 
@@ -44,20 +44,20 @@ describe('credentials', () => {
     const directory = await temporaryDirectory()
     const configPath = join(directory, 'config.yaml')
     await writeFile(configPath, 'api-keys:\n  - imported-key\n')
-    vscodeMock.settings.set('modelProvider.configPath', configPath)
+    vscodeMock.settings.set('universalChatProvider.configPath', configPath)
     const context = extensionContext()
     const store = new CredentialStore(context)
 
     await expect(findConfigPath()).resolves.toBe(configPath)
     await expect(store.inspectLocalConfig()).resolves.toMatchObject({ path: configPath, apiKey: 'imported-key' })
     await expect(store.importFromConfig(true)).resolves.toBe('imported-key')
-    await expect(context.secrets.get('cliproxyapi.apiKey')).resolves.toBe('imported-key')
+    await expect(context.secrets.get('universalChatProvider.apiKey')).resolves.toBe('imported-key')
   })
 
   it('reports missing, unusable, and malformed configs only when requested', async () => {
     const context = extensionContext()
     const store = new CredentialStore(context)
-    vscodeMock.settings.set('modelProvider.autoDetectConfig', false)
+    vscodeMock.settings.set('universalChatProvider.autoDetectConfig', false)
 
     await expect(store.importFromConfig(true)).resolves.toBeUndefined()
     expect(window.showWarningMessage).toHaveBeenCalledWith(
@@ -66,7 +66,7 @@ describe('credentials', () => {
 
     const directory = await temporaryDirectory()
     const configPath = join(directory, 'config.yaml')
-    vscodeMock.settings.set('modelProvider.configPath', configPath)
+    vscodeMock.settings.set('universalChatProvider.configPath', configPath)
     await writeFile(configPath, 'api-keys:\n  - your-api-key\n')
     await expect(store.importFromConfig(true)).resolves.toBeUndefined()
     expect(window.showWarningMessage).toHaveBeenCalledWith(`No usable API key was found in ${configPath}.`)
@@ -98,8 +98,8 @@ describe('credentials', () => {
       .mockResolvedValueOnce('  /proxy/config.yaml  ')
 
     await expect(configureConnection()).resolves.toBe(true)
-    expect(vscodeMock.settings.get('modelProvider.baseUrl')).toBe('http://proxy')
-    expect(vscodeMock.settings.get('modelProvider.configPath')).toBe('/proxy/config.yaml')
+    expect(vscodeMock.settings.get('universalChatProvider.baseUrl')).toBe('http://proxy')
+    expect(vscodeMock.settings.get('universalChatProvider.configPath')).toBe('/proxy/config.yaml')
 
     window.showInputBox.mockResolvedValueOnce(undefined)
     await expect(configureConnection()).resolves.toBe(false)
@@ -128,7 +128,7 @@ function extensionContext(): ExtensionContext {
 }
 
 async function temporaryDirectory(): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'modelprovider-credentials-'))
+  const directory = await mkdtemp(join(tmpdir(), 'universal-chat-provider-credentials-'))
   tempDirectories.push(directory)
   return directory
 }

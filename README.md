@@ -1,4 +1,4 @@
-# CLIProxyAPI Model Provider
+# Universal Chat Provider
 
 Expose the chat-capable models from a local
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server in GitHub
@@ -14,8 +14,6 @@ entries.
 
 ## Requirements
 
-- CLIProxyAPI running and reachable, by default at `http://127.0.0.1:8317`
-- A CLIProxyAPI API key
 - VS Code 1.124 or newer
 - GitHub Copilot Chat
 
@@ -28,26 +26,59 @@ This extension uses the proposed `chatProvider`,
 Proposed API extensions must be installed from a VSIX and cannot be published
 as ordinary Marketplace extensions.
 
-## Setup
+## Server modes
 
-1. Start CLIProxyAPI and complete the provider login flow there.
-2. Build and package this extension with `pnpm install && pnpm ext:package`.
-3. Install the generated VSIX in VS Code Insiders.
-4. Start the Extension Development Host or restart VS Code. When the extension
-   finds a local config, use the bottom **Import API Key** notification action.
-   If no config is found, use its **Configure Connection** action instead.
-5. Open Copilot Chat and choose a model under the **CLIProxyAPI** provider.
-6. Run **CLIProxyAPI: Select Commit Message Model** to choose the independent
-   model used by the Source Control commit-message action.
+The provider talks to a CLIProxyAPI server. The `universalChatProvider.server.mode`
+setting controls where that server comes from:
 
-The API key is stored in VS Code `SecretStorage`. The extension never starts or
-stops CLIProxyAPI itself. Model discovery runs immediately at startup when a key
-is already stored.
+- **`managed`** (default): the extension downloads, verifies, runs, and
+  supervises a CLIProxyAPI binary for you. Nothing to install. The binary is
+  cached under the extension's global storage, secrets are generated
+  automatically, and one shared server is reused across all VS Code windows.
+- **`external`**: the extension connects to a CLIProxyAPI server you start
+  yourself, using `universalChatProvider.baseUrl` and your own API key. This is the way
+  to point at a remote or shared instance.
 
-For local instances, the extension watches `config.yaml` and the configured
-`auth-dir` for credential changes and refreshes models after a short debounce.
-CLIProxyAPI does not expose its internal model-registry events over HTTP, so
-remote instances can be refreshed through the command or a settings change.
+### Managed mode (zero setup)
+
+1. Build and package the extension with `pnpm install && pnpm ext:package`, then
+   install the generated VSIX in VS Code Insiders.
+2. On first start the extension downloads the platform binary, generates its
+   config and keys, and starts the server in the background. Watch the status
+   bar item for progress.
+3. When no provider accounts are connected yet, accept the **Add Account**
+   prompt — or run **Universal Chat Provider: Add Account (Login)** anytime — and pick a
+   provider (Gemini, Codex, Claude, Antigravity, Kimi, xAI). The system browser
+   opens the provider's OAuth page and the running server captures the
+   redirect; the account is saved and models refresh automatically.
+4. Open Copilot Chat and choose a model under the **Universal Chat Provider** provider.
+
+Use **Universal Chat Provider: Manage Accounts** to list or remove connected accounts,
+**Restart Managed Server** / **Update Proxy Binary** to maintain it, and
+**Reset Managed Server** to recreate the generated config and keys.
+
+The downloaded binary defaults to a pinned version (`universalChatProvider.server.version`);
+set it to `latest` to track new releases, and use **Update Proxy Binary** to
+apply an update. The managed server is launched detached so it keeps running in
+the background, and is adopted (not duplicated) by other windows.
+
+### External mode (bring your own server)
+
+1. Set `universalChatProvider.server.mode` to `external`.
+2. Start CLIProxyAPI yourself and complete the provider login flow there.
+3. Use the bottom **Import API Key** notification action when a local config is
+   found, or **Configure Connection** to set the URL and key manually.
+
+The API key is stored in VS Code `SecretStorage`. In external mode the
+extension never starts or stops CLIProxyAPI. If your own server sets a plaintext
+`remote-management.secret-key`, the **Add Account (Login)** and **Manage
+Accounts** commands work against it too.
+
+In managed mode the extension watches its `auth-dir` for credential changes and
+refreshes models after a short debounce, so accounts added in-editor or via the
+CLI appear without a manual refresh. In external mode, logins completed
+in-editor refresh automatically and **Refresh Models** picks up changes made
+directly on the server.
 
 ## Commit Messages
 
@@ -57,12 +88,12 @@ untracked working-tree changes. The generated message is placed in the input
 box for review and is never committed automatically.
 
 Commit-message model selection is independent from Chat. The selected model is
-remembered in `modelProvider.commitMessage.model`; if no model is selected, the
+remembered in `universalChatProvider.commitMessage.model`; if no model is selected, the
 extension automatically uses the only available model or opens a live picker.
-Use **CLIProxyAPI: Select Commit Message Model** to change it.
+Use **Universal Chat Provider: Select Commit Message Model** to change it.
 
 By default, the generator requests a concise Conventional Commit. Set
-`modelProvider.commitMessage.instructions` to replace that style with
+`universalChatProvider.commitMessage.instructions` to replace that style with
 repository-specific instructions. Diff context is bounded per file and per
 request, and unresolved merge conflicts must be resolved before generation.
 
@@ -94,14 +125,16 @@ server-side usage is still reported by CLIProxyAPI after a response.
 
 <!-- configs -->
 
-| Key                                        | Description                                                                                                                                    | Type      | Default                   |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
-| `modelProvider.baseUrl`                    | Base URL of the CLIProxyAPI server.                                                                                                            | `string`  | `"http://127.0.0.1:8317"` |
-| `modelProvider.configPath`                 | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                          | `string`  | `""`                      |
-| `modelProvider.autoDetectConfig`           | Search common local CLIProxyAPI config locations when no config path is set.                                                                   | `boolean` | `true`                    |
-| `modelProvider.defaultMaxOutputTokens`     | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                 | `number`  | `16384`                   |
-| `modelProvider.commitMessage.model`        | Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models.       | `string`  | `""`                      |
-| `modelProvider.commitMessage.instructions` | Optional commit-message instructions. When empty, concise Conventional Commits are generated; when set, these instructions replace that style. | `string`  | `""`                      |
+| Key                                                | Description                                                                                                                                    | Type      | Default                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
+| `universalChatProvider.server.mode`                | How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance.                                   | `string`  | `"managed"`               |
+| `universalChatProvider.server.version`             | CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases.                 | `string`  | `"7.2.5"`                 |
+| `universalChatProvider.baseUrl`                    | Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port.                                         | `string`  | `"http://127.0.0.1:8317"` |
+| `universalChatProvider.configPath`                 | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                          | `string`  | `""`                      |
+| `universalChatProvider.autoDetectConfig`           | Search common local CLIProxyAPI config locations when no config path is set.                                                                   | `boolean` | `true`                    |
+| `universalChatProvider.defaultMaxOutputTokens`     | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                 | `number`  | `16384`                   |
+| `universalChatProvider.commitMessage.model`        | Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models.       | `string`  | `""`                      |
+| `universalChatProvider.commitMessage.instructions` | Optional commit-message instructions. When empty, concise Conventional Commits are generated; when set, these instructions replace that style. | `string`  | `""`                      |
 
 <!-- configs -->
 
@@ -109,16 +142,21 @@ server-side usage is still reported by CLIProxyAPI after a response.
 
 <!-- commands -->
 
-| Command                                  | Title                                    |
-| ---------------------------------------- | ---------------------------------------- |
-| `modelProvider.manage`                   | CLIProxyAPI: Manage Provider             |
-| `modelProvider.configure`                | CLIProxyAPI: Configure Connection        |
-| `modelProvider.importConfig`             | CLIProxyAPI: Import API Key from Config  |
-| `modelProvider.refresh`                  | CLIProxyAPI: Refresh Models              |
-| `modelProvider.generateCommitMessage`    | CLIProxyAPI: Generate Commit Message     |
-| `modelProvider.selectCommitMessageModel` | CLIProxyAPI: Select Commit Message Model |
-| `modelProvider.clearCredentials`         | CLIProxyAPI: Clear Stored API Key        |
-| `modelProvider.showLogs`                 | CLIProxyAPI: Show Logs                   |
+| Command                                          | Title                                                |
+| ------------------------------------------------ | ---------------------------------------------------- |
+| `universalChatProvider.manage`                   | Universal Chat Provider: Manage Provider             |
+| `universalChatProvider.login`                    | Universal Chat Provider: Add Account (Login)         |
+| `universalChatProvider.manageAccounts`           | Universal Chat Provider: Manage Accounts             |
+| `universalChatProvider.restartServer`            | Universal Chat Provider: Restart Managed Server      |
+| `universalChatProvider.updateBinary`             | Universal Chat Provider: Update Proxy Binary         |
+| `universalChatProvider.resetServer`              | Universal Chat Provider: Reset Managed Server        |
+| `universalChatProvider.configure`                | Universal Chat Provider: Configure Connection        |
+| `universalChatProvider.importConfig`             | Universal Chat Provider: Import API Key from Config  |
+| `universalChatProvider.refresh`                  | Universal Chat Provider: Refresh Models              |
+| `universalChatProvider.generateCommitMessage`    | Universal Chat Provider: Generate Commit Message     |
+| `universalChatProvider.selectCommitMessageModel` | Universal Chat Provider: Select Commit Message Model |
+| `universalChatProvider.clearCredentials`         | Universal Chat Provider: Clear Stored API Key        |
+| `universalChatProvider.showLogs`                 | Universal Chat Provider: Show Logs                   |
 
 <!-- commands -->
 
@@ -151,12 +189,12 @@ The test reads the API key from the same automatically discovered CLIProxyAPI
 `config.yaml` used by the extension. These environment variables override its
 defaults:
 
-| Variable                                | Default                                |
-| --------------------------------------- | -------------------------------------- |
-| `MODELPROVIDER_E2E_BASE_URL`            | `http://127.0.0.1:8317`                |
-| `MODELPROVIDER_E2E_CONFIG_PATH`          | Automatically discovered config        |
-| `MODELPROVIDER_E2E_OPENAI_MODEL`         | `gpt-5.4-mini`                         |
-| `MODELPROVIDER_E2E_GEMINI_MODEL`         | `gemini-3.1-flash-lite`                |
+| Variable                                   | Default                         |
+| ------------------------------------------ | ------------------------------- |
+| `UNIVERSAL_CHAT_PROVIDER_E2E_BASE_URL`     | `http://127.0.0.1:8317`         |
+| `UNIVERSAL_CHAT_PROVIDER_E2E_CONFIG_PATH`  | Automatically discovered config |
+| `UNIVERSAL_CHAT_PROVIDER_E2E_OPENAI_MODEL` | `gpt-5.4-mini`                  |
+| `UNIVERSAL_CHAT_PROVIDER_E2E_GEMINI_MODEL` | `gemini-3.1-flash-lite`         |
 
 The suite covers request construction, model discovery, streaming transport,
 and SSE parsing. Extension Host registration and Copilot Chat UI behavior
