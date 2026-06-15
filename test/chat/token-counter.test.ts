@@ -4,6 +4,7 @@ import type { TokenCounterDeps } from '../../src/chat/token-counter'
 import type { CredentialStore } from '../../src/cliproxy/credentials'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CancellationTokenSource } from 'vscode'
+import { estimateTokens } from '../../src/chat/estimate'
 import { TokenCounter } from '../../src/chat/token-counter'
 import { vscodeMock } from '../support/vscode'
 
@@ -24,56 +25,62 @@ beforeEach(() => {
 })
 
 describe('token counter', () => {
-  it('returns the proxy count and caches it per content', async () => {
+  it('answers instantly with a local estimate, then serves the exact proxy count once cached', async () => {
     const counter = new TokenCounter(deps())
 
-    await expect(counter.count(model, 'hello')).resolves.toBe(11)
-    await expect(counter.count(model, 'hello')).resolves.toBe(11)
-    await expect(counter.count(model, 'different')).resolves.toBe(11)
+    expect(counter.count(model, 'hello')).toBe(estimateTokens('hello'))
+    await counter.whenIdle()
+    expect(counter.count(model, 'hello')).toBe(11)
+
+    expect(counter.count(model, 'different')).toBe(estimateTokens('different'))
+    await counter.whenIdle()
+    expect(counter.count(model, 'different')).toBe(11)
 
     expect(clientMocks.countInputTokens).toHaveBeenCalledTimes(2)
   })
 
-  it('coalesces identical in-flight requests into one call', async () => {
-    let release!: (value: number) => void
-    clientMocks.countInputTokens.mockReturnValueOnce(new Promise<number>((resolve) => {
-      release = resolve
-    }))
+  it('coalesces identical content into a single background count', async () => {
     const counter = new TokenCounter(deps())
 
-    const first = counter.count(model, 'hello')
-    const second = counter.count(model, 'hello')
-    release(42)
+    counter.count(model, 'hello')
+    counter.count(model, 'hello')
+    await counter.whenIdle()
 
-    await expect(first).resolves.toBe(42)
-    await expect(second).resolves.toBe(42)
     expect(clientMocks.countInputTokens).toHaveBeenCalledTimes(1)
+    expect(counter.count(model, 'hello')).toBe(11)
   })
 
-  it('returns 0 and logs when the proxy count fails, without caching the failure', async () => {
+  it('keeps serving the estimate and retries when a background count fails, without caching it', async () => {
     clientMocks.countInputTokens
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(9)
     const counter = new TokenCounter(deps())
 
-    await expect(counter.count(model, 'hello')).resolves.toBe(0)
+    expect(counter.count(model, 'hello')).toBe(estimateTokens('hello'))
+    await counter.whenIdle()
     expect(vscodeMock.output.appendLine).toHaveBeenCalledWith('[token-count] model-a: offline')
-    await expect(counter.count(model, 'hello')).resolves.toBe(9)
+
+    // The failure was not cached: still the estimate, and a fresh fetch is started.
+    expect(counter.count(model, 'hello')).toBe(estimateTokens('hello'))
+    await counter.whenIdle()
+    expect(counter.count(model, 'hello')).toBe(9)
   })
 
-  it('returns 0 without calling the proxy when no credentials are stored', async () => {
+  it('returns the estimate without calling the proxy when no credentials are stored', async () => {
     const counter = new TokenCounter(deps({ apiKey: undefined }))
 
-    await expect(counter.count(model, 'hello')).resolves.toBe(0)
+    expect(counter.count(model, 'hello')).toBe(estimateTokens('hello'))
+    await counter.whenIdle()
     expect(clientMocks.countInputTokens).not.toHaveBeenCalled()
   })
 
-  it('returns 0 for an already-cancelled token without calling the proxy', async () => {
+  it('returns 0 for an already-cancelled token without counting', async () => {
     const counter = new TokenCounter(deps())
     const source = new CancellationTokenSource()
     source.cancel()
 
-    await expect(counter.count(model, 'hello', source.token)).resolves.toBe(0)
+    expect(counter.count(model, 'hello', source.token)).toBe(0)
+    await counter.whenIdle()
     expect(clientMocks.countInputTokens).not.toHaveBeenCalled()
   })
 })

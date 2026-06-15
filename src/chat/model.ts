@@ -97,7 +97,14 @@ export function mapProxyModels(
       options.defaultMaxOutputTokens,
     )
     const maximumContext = positiveInteger(detail?.max_context_window ?? totalContext, totalContext)
-    const maxInputTokens = Math.max(1, totalContext - Math.min(outputTokens, totalContext - 1))
+    // `maxInputTokens` is the prompt budget VS Code compacts against, not a fixed
+    // model property: input and output share one window, so we only *reserve* a
+    // slice of it for the reply. Reserving the full `outputTokens` collapses the
+    // budget to ~zero whenever the proxy reports an output cap close to (or equal
+    // to) the context window — which makes Copilot summarize almost immediately.
+    // Cap the reserve at a fifth of the window so input always keeps ~80%.
+    const outputReserve = Math.min(outputTokens, Math.floor(totalContext * 0.2))
+    const maxInputTokens = Math.max(1, totalContext - outputReserve)
     const reasoning = resolveReasoning(detail, catalogModel)
     const advertisedName = detail?.display_name ?? catalogModel?.display_name ?? entry.id
     let displayName = normalizeReasoningModelName(advertisedName, reasoning.levels)

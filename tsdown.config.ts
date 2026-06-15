@@ -11,7 +11,7 @@ export default defineConfig({
   deps: {
     neverBundle: ['vscode'],
     alwaysBundle: [
-      'js-tiktoken',
+      'tokenx',
       'untildify',
       'yaml',
     ],

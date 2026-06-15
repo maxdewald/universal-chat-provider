@@ -191,7 +191,7 @@ export function convertMessage(message: LanguageModelChatRequestMessage): Record
   return items
 }
 
-function serializeToolResult(part: LanguageModelToolResultPart): string {
+export function serializeToolResult(part: LanguageModelToolResultPart): string {
   return part.content.map((value) => {
     if (value instanceof LanguageModelTextPart)
       return value.value

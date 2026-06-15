@@ -5,13 +5,14 @@ import type { ProviderModel } from './model'
 import { createHash } from 'node:crypto'
 import { CLIProxyClient } from '../cliproxy/client'
 import { errorMessage } from '../shared/errors'
+import { estimateTokens } from './estimate'
 import { buildCountPayload, fingerprintCountValue } from './request'
 
 /** Most-recent counts to keep resident; token counts of fixed content never change. */
 const MAX_CACHE_ENTRIES = 4096
 /** Cap concurrent count requests so prompt building can't flood the proxy. */
 const MAX_CONCURRENCY = 8
-/** Give up on a single count so a slow proxy can never stall prompt building. */
+/** Give up on a single count so a slow proxy can never stall the cache. */
 const REQUEST_TIMEOUT_MS = 15_000
 
 export interface TokenCounterDeps {
@@ -21,58 +22,76 @@ export interface TokenCounterDeps {
 }
 
 /**
- * Counts tokens exactly via the proxy's `count_tokens` endpoint — no local
- * estimation. Results are cached by content (so stable history is counted at
- * most once) and identical in-flight requests are coalesced. A count that
- * cannot be obtained (no credentials, transport failure, timeout, cancellation)
- * returns 0 rather than a guessed number: an unknown contributes nothing to the
- * budget, deferring compression to the real limit instead of triggering it early.
+ * Token counts for VS Code's context-window budgeting. VS Code calls
+ * `provideTokenCount` constantly while it assembles and re-renders a prompt, so
+ * this must answer instantly and never block: it returns a fast local estimate
+ * (`tokenx`), or an exact value once we have one cached.
+ *
+ * Exact counts come from the proxy's `count_tokens` endpoint (each provider's
+ * real tokenizer) and are fetched in the background — once per unique piece of
+ * content, coalesced and concurrency-capped — then cached for the rest of the
+ * session. The first sighting of new content is served by the estimate; the
+ * exact value replaces it on the next count. Budgeting tolerates this staleness:
+ * it only decides when to compress, and the server enforces the real limit.
  */
 export class TokenCounter {
   private readonly cache = new Map<string, number>()
-  private readonly inFlight = new Map<string, Promise<number>>()
+  private readonly inFlight = new Map<string, Promise<void>>()
   private active = 0
   private readonly waiters: Array<() => void> = []
 
   constructor(private readonly deps: TokenCounterDeps) {}
 
-  async count(
+  count(
     model: ProviderModel,
     value: string | LanguageModelChatRequestMessage,
     token?: CancellationToken,
-  ): Promise<number> {
+  ): number {
     if (token?.isCancellationRequested)
       return 0
 
     const key = this.cacheKey(model, value)
-    const cached = this.cache.get(key)
-    if (cached !== undefined)
-      return cached
+    const exact = this.cache.get(key)
+    if (exact !== undefined)
+      return exact
 
-    const existing = this.inFlight.get(key)
-    if (existing !== undefined)
-      return existing
+    this.warm(key, model, value)
+    return estimateTokens(value)
+  }
 
-    const request = this.fetchCount(model, value, token)
+  /** Resolve once every in-flight background count has settled (tests, shutdown). */
+  async whenIdle(): Promise<void> {
+    await Promise.all(this.inFlight.values())
+  }
+
+  /**
+   * Fetch the exact count in the background and cache it. Deliberately detached
+   * from the caller's cancellation token: the call already returned an estimate,
+   * so this should run to completion (bounded by its own timeout) and cache the
+   * content once, rather than being abandoned and re-fetched on the next render.
+   */
+  private warm(
+    key: string,
+    model: ProviderModel,
+    value: string | LanguageModelChatRequestMessage,
+  ): void {
+    if (this.inFlight.has(key))
+      return
+
+    const request = this.fetchCount(model, value)
       .then((count) => {
         if (count !== undefined)
           this.remember(key, count)
-        return count ?? 0
       })
       .finally(() => this.inFlight.delete(key))
     this.inFlight.set(key, request)
-    return request
   }
 
   private async fetchCount(
     model: ProviderModel,
     value: string | LanguageModelChatRequestMessage,
-    token?: CancellationToken,
   ): Promise<number | undefined> {
     return this.withSlot(async () => {
-      if (token?.isCancellationRequested)
-        return undefined
-
       let apiKey: string | undefined
       try {
         await this.deps.connection.ensureReady(false)
@@ -86,19 +105,16 @@ export class TokenCounter {
 
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-      const cancellation = token?.onCancellationRequested(() => controller.abort())
       try {
         const client = new CLIProxyClient(this.deps.connection.baseUrl(), apiKey)
         return await client.countInputTokens(buildCountPayload(model, value), controller.signal)
       }
       catch (error) {
-        if (token?.isCancellationRequested !== true)
-          this.deps.output.appendLine(`[token-count] ${model.proxyModelId}: ${errorMessage(error)}`)
+        this.deps.output.appendLine(`[token-count] ${model.proxyModelId}: ${errorMessage(error)}`)
         return undefined
       }
       finally {
         clearTimeout(timeout)
-        cancellation?.dispose()
       }
     })
   }

@@ -30,7 +30,7 @@ describe('model mapping', () => {
     expect(models).toHaveLength(1)
     expect(models[0]).toMatchObject({
       id: 'gpt-5.4',
-      maxInputTokens: 272_000,
+      maxInputTokens: 320_000,
       maxOutputTokens: 128_000,
       totalContextTokens: 400_000,
       maximumContextTokens: 1_000_000,
@@ -353,6 +353,24 @@ describe('model mapping', () => {
       maxInputTokens: 224_000,
     })
     expect(skipped).toEqual(['unsized'])
+  })
+
+  it('caps the output reserve so the input budget never collapses near the context size', () => {
+    const [haiku, over] = mapProxyModels(
+      [
+        // Output cap equal to the window ("whole window usable for output").
+        { id: 'claude-haiku', owned_by: 'antigravity', context_length: 200_000, max_completion_tokens: 200_000 },
+        // Output cap larger than the window.
+        { id: 'over-reported', owned_by: 'antigravity', context_length: 100_000, max_completion_tokens: 500_000 },
+      ],
+      [],
+      new Map(),
+      { defaultMaxOutputTokens: 16_384 },
+    )
+
+    // The old formula collapsed these to 1; now input keeps ~80% of the window.
+    expect(haiku).toMatchObject({ id: 'claude-haiku', totalContextTokens: 200_000, maxInputTokens: 160_000 })
+    expect(over).toMatchObject({ id: 'over-reported', totalContextTokens: 100_000, maxInputTokens: 80_000 })
   })
 
   it('ignores malformed catalog sections', () => {

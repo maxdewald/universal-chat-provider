@@ -85,6 +85,18 @@ export class ModelRegistry {
         defaultMaxOutputTokens: settings.get<number>('defaultMaxOutputTokens', 16_384),
         onSkipped: (id, reason) => this.output.appendLine(`Skipped model ${id}: ${reason}.`),
       })
+      // TEMP-DIAG: dump Haiku sizing to verify the maxInputTokens fix end-to-end.
+      for (const entry of discovery.available) {
+        if (!/haiku/i.test(entry.id))
+          continue
+        const detail = discovery.metadata.find(m => m.slug === entry.id)
+        const mapped = models.find(m => m.proxyModelId === entry.id)
+        this.output.appendLine(
+          `[diag] ${entry.id} raw context_length=${entry.context_length} max_completion_tokens=${entry.max_completion_tokens}`
+          + ` | meta context_window=${detail?.context_window} max_context_window=${detail?.max_context_window}`
+          + ` | mapped maxInput=${mapped?.maxInputTokens} maxOutput=${mapped?.maxOutputTokens} total=${mapped?.totalContextTokens}`,
+        )
+      }
       const fingerprint = JSON.stringify(models)
       if (fingerprint !== this.cachedFingerprint) {
         this.cachedFingerprint = fingerprint

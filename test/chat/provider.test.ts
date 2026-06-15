@@ -11,6 +11,7 @@ import {
   LanguageModelThinkingPart,
   LanguageModelToolCallPart,
 } from 'vscode'
+import { estimateTokens } from '../../src/chat/estimate'
 import { UniversalChatProvider } from '../../src/chat/provider'
 
 import { ProxyHttpError } from '../../src/cliproxy/errors'
@@ -253,11 +254,17 @@ describe('language model provider', () => {
     expect(vscodeMock.settings.get('universalChatProvider.baseUrl')).toBe('http://new-proxy')
     expect(clientMocks.discover).toHaveBeenCalledTimes(1)
 
+    // The estimate answers instantly; the exact proxy count lands in the background.
     await expect(provider.provideTokenCount(
       model(),
       'hello',
       new CancellationTokenSource().token,
-    )).resolves.toBe(7)
+    )).resolves.toBe(estimateTokens('hello'))
+    await vi.waitFor(async () => expect(await provider.provideTokenCount(
+      model(),
+      'hello',
+      new CancellationTokenSource().token,
+    )).toBe(7))
     expect(clientMocks.countInputTokens).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'model-a' }),
       expect.any(AbortSignal),
