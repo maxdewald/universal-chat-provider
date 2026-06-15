@@ -64,6 +64,46 @@ describe('server controller lifecycle', () => {
   }
 })
 
+describe('server controller status snapshot', () => {
+  let root: string
+
+  beforeEach(async () => {
+    resetVSCodeMock()
+    root = await mkdtemp(join(tmpdir(), 'ucp-status-'))
+    vi.spyOn(ManagedServer.prototype, 'ensureRunning').mockResolvedValue({ baseUrl: 'http://127.0.0.1:1', port: 1 })
+    vi.spyOn(ManagedServer.prototype, 'shutdown').mockReturnValue()
+    vi.spyOn(ManagedServer.prototype, 'dispose').mockReturnValue()
+  })
+
+  afterEach(async () => {
+    vi.restoreAllMocks()
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it('reports the managed server as running once it has started', async () => {
+    const controller = new ServerController(context(root), vscodeMock.output as never)
+    await controller.ensureReady(false)
+
+    const snapshot = await controller.statusSnapshot()
+
+    expect(snapshot).toMatchObject({ mode: 'managed', status: 'running' })
+    expect(snapshot.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+  })
+
+  it('reports external mode and skips the account probe when no server answers', async () => {
+    vscodeMock.settings.set('universalChatProvider.server.mode', 'external')
+    // An unreachable port makes the best-effort account probe fail fast.
+    vscodeMock.settings.set('universalChatProvider.baseUrl', 'http://127.0.0.1:9')
+    vscodeMock.secrets.set('universalChatProvider.managementKey', 'mgmt-secret')
+    const controller = new ServerController(context(root), vscodeMock.output as never)
+
+    const snapshot = await controller.statusSnapshot()
+
+    expect(snapshot).toMatchObject({ mode: 'external', status: 'external', baseUrl: 'http://127.0.0.1:9' })
+    expect(snapshot.accounts).toBeUndefined()
+  })
+})
+
 function context(root: string): ExtensionContext {
   const globalState = new Map<string, unknown>()
   return {

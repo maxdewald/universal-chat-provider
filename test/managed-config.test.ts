@@ -32,6 +32,7 @@ describe('managed config', () => {
       'port': 8317,
       'auth-dir': '/tmp/store/auth',
       'api-keys': ['proxy-key'],
+      'logging-to-file': false,
       'remote-management': {
         'allow-remote': false,
         'secret-key': 'mgmt-key',
@@ -74,6 +75,7 @@ describe('setConfigPort', () => {
       'port': 51227,
       'auth-dir': join(dir, 'auth'),
       'api-keys': ['proxy-key'],
+      'logging-to-file': false,
       'remote-management': {
         'allow-remote': false,
         'secret-key': 'mgmt-key',

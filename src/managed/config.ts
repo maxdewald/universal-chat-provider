@@ -55,6 +55,11 @@ export interface ManagedConfigOptions {
  * Render the minimal `config.yaml` for a locally managed server. The plaintext
  * `secret-key` is hashed by CLIProxyAPI on startup; we keep the plaintext in
  * SecretStorage so management calls keep working across restarts.
+ *
+ * `logging-to-file` is forced off: it defaults on and would make the binary
+ * create a `logs/` folder in its working directory. We instead let it log to
+ * the console and capture stdout/stderr into our own `cliproxy.log` under
+ * globalStorage, so nothing leaks outside the extension's storage.
  */
 export function buildManagedConfig(options: ManagedConfigOptions): string {
   return stringify({
@@ -62,6 +67,7 @@ export function buildManagedConfig(options: ManagedConfigOptions): string {
     'port': options.port,
     'auth-dir': options.authDir,
     'api-keys': [options.apiKey],
+    'logging-to-file': false,
     'remote-management': {
       'allow-remote': false,
       'secret-key': options.managementKey,

@@ -165,6 +165,10 @@ export class ManagedServer {
     const logFd = openSync(this.deps.paths.logPath, 'a')
     try {
       const child = spawn(binaryPath, ['--config', this.deps.paths.configPath], {
+        // Anchor the working directory to our managed root so any path the
+        // binary resolves relative to its cwd (e.g. request-log output) stays
+        // inside globalStorage instead of leaking into the host's cwd.
+        cwd: this.deps.paths.root,
         detached: true,
         stdio: ['ignore', logFd, logFd],
       })

@@ -29,9 +29,21 @@ const MGMT_KEY_SECRET = 'universalChatProvider.managementKey'
 const PORT_STATE_KEY = 'universalChatProvider.managedPort'
 const LOGIN_TIMEOUT_MS = 180_000
 const LOGIN_POLL_MS = 1500
+const STATUS_PROBE_TIMEOUT_MS = 1500
 
 export type ServerMode = 'managed' | 'external'
 export type ServerStatus = 'external' | 'starting' | 'running' | 'error'
+
+/** A point-in-time view of the proxy for the manage picker's status entry. */
+export interface ServerStatusSnapshot {
+  mode: ServerMode
+  status: ServerStatus
+  baseUrl: string
+  /** Managed binary version, when this window spawned it (absent when adopted). */
+  version?: string
+  /** Connected provider accounts, when the server could be reached. */
+  accounts?: number
+}
 
 /**
  * Owns the managed-server experience and exposes the {@link ProxyConnection} the
@@ -48,6 +60,7 @@ export class ServerController implements ProxyConnection {
   private refreshDebounce: ReturnType<typeof setTimeout> | undefined
   private refreshListener: (() => void) | undefined
   private statusListener: ((status: ServerStatus) => void) | undefined
+  private lastStatus: ServerStatus = 'starting'
 
   constructor(
     private readonly context: ExtensionContext,
@@ -65,6 +78,24 @@ export class ServerController implements ProxyConnection {
       return normalizeBaseUrl(workspace.getConfiguration('universalChatProvider').get<string>('baseUrl', `http://${DEFAULT_HOST}:${DEFAULT_PORT}`))
     return this.server?.baseUrl()
       ?? `http://${DEFAULT_HOST}:${this.context.globalState.get<number>(PORT_STATE_KEY) ?? DEFAULT_PORT}`
+  }
+
+  /**
+   * Snapshot the proxy for the manage picker's status row. Cheap by design: it
+   * reports the last pushed status rather than re-probing health, and only the
+   * account count touches the network (best-effort, never starting the server).
+   */
+  async statusSnapshot(): Promise<ServerStatusSnapshot> {
+    const mode = this.mode()
+    const version = this.server?.installedVersion()
+    const snapshot: ServerStatusSnapshot = {
+      mode,
+      status: mode === 'external' ? 'external' : this.lastStatus,
+      baseUrl: this.baseUrl(),
+      ...(version !== undefined ? { version } : {}),
+    }
+    const accounts = await this.countAccounts()
+    return accounts === undefined ? snapshot : { ...snapshot, accounts }
   }
 
   async ensureReady(_interactive: boolean): Promise<void> {
@@ -420,7 +451,43 @@ export class ServerController implements ProxyConnection {
   }
 
   private setStatus(status: ServerStatus): void {
+    this.lastStatus = status
     this.statusListener?.(status)
+  }
+
+  /**
+   * Best-effort count of connected accounts for the status row. Returns
+   * undefined whenever the server is unreachable or no management key is known,
+   * and never starts a managed server just to answer.
+   */
+  private async countAccounts(): Promise<number | undefined> {
+    const management = await this.managementForStatus()
+    if (management === undefined)
+      return undefined
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), STATUS_PROBE_TIMEOUT_MS)
+    try {
+      const files = await new ManagementClient(management.baseUrl, management.key).listAuthFiles(controller.signal)
+      return files.length
+    }
+    catch {
+      return undefined
+    }
+    finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** Management endpoint for a status probe, only when one is already known. */
+  private async managementForStatus(): Promise<{ baseUrl: string, key: string } | undefined> {
+    if (this.mode() === 'external') {
+      const key = await this.externalManagementKey()
+      return key === undefined ? undefined : { baseUrl: this.baseUrl(), key }
+    }
+    const baseUrl = this.server?.baseUrl()
+    if (baseUrl === undefined || this.managementKey === undefined)
+      return undefined
+    return { baseUrl, key: this.managementKey }
   }
 
   private surfaceStartupError(error: unknown): void {

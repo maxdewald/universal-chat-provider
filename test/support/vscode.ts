@@ -73,6 +73,11 @@ export enum ProgressLocation {
   Notification = 15,
 }
 
+export enum QuickPickItemKind {
+  Separator = -1,
+  Default = 0,
+}
+
 export class RelativePattern {
   constructor(
     readonly base: unknown,

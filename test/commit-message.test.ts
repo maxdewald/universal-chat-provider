@@ -49,7 +49,7 @@ describe('commit message service', () => {
     expect(provider.completeText).toHaveBeenCalledWith(
       selectedModel,
       expect.stringContaining('Change scope: staged changes'),
-      512,
+      64,
       expect.any(Object),
     )
     expect(provider.completeText.mock.calls[0]?.[1]).toContain('staged diff')
@@ -123,7 +123,7 @@ describe('commit message service', () => {
     expect(provider.completeText).toHaveBeenCalledWith(
       current,
       expect.any(String),
-      512,
+      64,
       undefined,
     )
   })
@@ -189,7 +189,33 @@ describe('commit message service', () => {
       staged: true,
     })
     expect(defaults).toContain('Conventional Commits')
+    expect(defaults).toContain('single Conventional Commits subject line')
+    expect(defaults).toContain('Do not add a body.')
     expect(defaults).toContain('Branch: (detached HEAD)')
+  })
+
+  it('raises the output token budget when custom instructions are set', async () => {
+    const root = Uri.file('/repo')
+    const repository = gitRepository(root, { indexChanges: [change('/repo/a.ts')] })
+    repository.diffIndexWithHEAD.mockResolvedValue('diff')
+    installGit(repository)
+    const selectedModel = model('commit-model', 'Commit Model')
+    const provider = providerMock([selectedModel])
+    provider.completeText.mockResolvedValue('feat: add body')
+    vscodeMock.settings.set('universalChatProvider.commitMessage.model', selectedModel.id)
+    vscodeMock.settings.set(
+      'universalChatProvider.commitMessage.instructions',
+      'Include a short body explaining motivation.',
+    )
+
+    await new CommitMessageService(provider).generate(root)
+
+    expect(provider.completeText).toHaveBeenCalledWith(
+      selectedModel,
+      expect.stringContaining('Include a short body explaining motivation.'),
+      512,
+      undefined,
+    )
   })
 
   it('preserves the input for conflicts, cancellation, and provider failures', async () => {

@@ -17,6 +17,7 @@ const MAX_FILE_CONTEXT = 20_000
 const MAX_TOTAL_CONTEXT = 100_000
 const TOTAL_LIMIT_RESERVE = 128
 const COMMIT_MESSAGE_OUTPUT_TOKENS = 512
+const COMMIT_SUBJECT_OUTPUT_TOKENS = 64
 
 interface GitChange {
   readonly uri: Uri
@@ -124,10 +125,13 @@ export class CommitMessageService {
         staged,
         ...(branch !== undefined ? { branch } : {}),
       })
+      const maxOutputTokens = instructions.length > 0
+        ? COMMIT_MESSAGE_OUTPUT_TOKENS
+        : COMMIT_SUBJECT_OUTPUT_TOKENS
       const response = await this.provider.completeText(
         model,
         prompt,
-        COMMIT_MESSAGE_OUTPUT_TOKENS,
+        maxOutputTokens,
         token,
       )
       if (response === undefined || token?.isCancellationRequested)
@@ -245,16 +249,17 @@ export function buildCommitMessagePrompt(options: CommitPromptOptions): string {
   const style = options.instructions.length > 0
     ? options.instructions
     : [
-        'Use the Conventional Commits format: type(optional-scope): concise description.',
-        'Use an imperative, lowercase description without a trailing period.',
-        'Add a short body only when it explains important motivation or behavior.',
+        'Write a single Conventional Commits subject line: type(optional-scope): description.',
+        'Use an imperative, lowercase description without a trailing period, ideally under 72 characters.',
+        'Summarize at a high level — do not enumerate files or chain multiple changes with semicolons.',
+        'Output only the subject line. Do not add a body.',
       ].join('\n')
 
   return [
     'Generate a Git commit message for the changes below.',
     '',
     'Output rules:',
-    '- Return only the commit message.',
+    '- Return only the commit message, with no surrounding blank lines.',
     '- Do not use Markdown fences, quotations, labels, or explanations.',
     '- Do not invent changes that are absent from the supplied context.',
     '',

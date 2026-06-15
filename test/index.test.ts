@@ -64,8 +64,16 @@ describe('extension activation', () => {
 })
 
 function extensionContext(): ExtensionContext {
+  const globalState = new Map<string, unknown>()
   return {
     subscriptions: [],
+    globalStorageUri: { fsPath: '/tmp/ucp-index-test' },
+    globalState: {
+      get: <T>(key: string, fallback?: T): T => (globalState.get(key) ?? fallback) as T,
+      update: async (key: string, value: unknown) => {
+        globalState.set(key, value)
+      },
+    },
     secrets: {
       get: async (key: string) => vscodeMock.secrets.get(key),
       store: async (key: string, value: string) => {

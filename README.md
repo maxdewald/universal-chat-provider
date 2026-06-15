@@ -92,10 +92,11 @@ remembered in `universalChatProvider.commitMessage.model`; if no model is select
 extension automatically uses the only available model or opens a live picker.
 Use **Universal Chat Provider: Select Commit Message Model** to change it.
 
-By default, the generator requests a concise Conventional Commit. Set
-`universalChatProvider.commitMessage.instructions` to replace that style with
-repository-specific instructions. Diff context is bounded per file and per
-request, and unresolved merge conflicts must be resolved before generation.
+By default, the generator requests a single-line Conventional Commit subject
+with no body. Set `universalChatProvider.commitMessage.instructions` to replace
+that style with repository-specific instructions, for example to opt into a
+short body. Diff context is bounded per file and per request, and unresolved
+merge conflicts must be resolved before generation.
 
 ## Model Metadata
 
@@ -125,16 +126,16 @@ server-side usage is still reported by CLIProxyAPI after a response.
 
 <!-- configs -->
 
-| Key                                                | Description                                                                                                                                    | Type      | Default                   |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
-| `universalChatProvider.server.mode`                | How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance.                                   | `string`  | `"managed"`               |
-| `universalChatProvider.server.version`             | CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases.                 | `string`  | `"7.2.5"`                 |
-| `universalChatProvider.baseUrl`                    | Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port.                                         | `string`  | `"http://127.0.0.1:8317"` |
-| `universalChatProvider.configPath`                 | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                          | `string`  | `""`                      |
-| `universalChatProvider.autoDetectConfig`           | Search common local CLIProxyAPI config locations when no config path is set.                                                                   | `boolean` | `true`                    |
-| `universalChatProvider.defaultMaxOutputTokens`     | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                 | `number`  | `16384`                   |
-| `universalChatProvider.commitMessage.model`        | Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models.       | `string`  | `""`                      |
-| `universalChatProvider.commitMessage.instructions` | Optional commit-message instructions. When empty, concise Conventional Commits are generated; when set, these instructions replace that style. | `string`  | `""`                      |
+| Key                                                | Description                                                                                                                                                                                                     | Type      | Default                   |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
+| `universalChatProvider.server.mode`                | How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance.                                                                                                    | `string`  | `"managed"`               |
+| `universalChatProvider.server.version`             | CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases.                                                                                  | `string`  | `"7.2.5"`                 |
+| `universalChatProvider.baseUrl`                    | Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port.                                                                                                          | `string`  | `"http://127.0.0.1:8317"` |
+| `universalChatProvider.configPath`                 | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                                                                                           | `string`  | `""`                      |
+| `universalChatProvider.autoDetectConfig`           | Search common local CLIProxyAPI config locations when no config path is set.                                                                                                                                    | `boolean` | `true`                    |
+| `universalChatProvider.defaultMaxOutputTokens`     | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                                                                                  | `number`  | `16384`                   |
+| `universalChatProvider.commitMessage.model`        | Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models.                                                                        | `string`  | `""`                      |
+| `universalChatProvider.commitMessage.instructions` | Optional commit-message instructions. When empty, a single-line Conventional Commits subject (no body) is generated; when set, these instructions replace that style and allow a longer message such as a body. | `string`  | `""`                      |
 
 <!-- configs -->
 

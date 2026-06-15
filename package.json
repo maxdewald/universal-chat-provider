@@ -167,7 +167,7 @@
           "default": "",
           "scope": "resource",
           "editPresentation": "multilineText",
-          "description": "Optional commit-message instructions. When empty, concise Conventional Commits are generated; when set, these instructions replace that style."
+          "description": "Optional commit-message instructions. When empty, a single-line Conventional Commits subject (no body) is generated; when set, these instructions replace that style and allow a longer message such as a body."
         }
       }
     }
