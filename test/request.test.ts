@@ -8,7 +8,7 @@ import {
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
 } from 'vscode'
-import { buildRequest, buildTextRequest, convertMessage } from '../src/request'
+import { buildPromptCacheKey, buildRequest, buildTextRequest, convertMessage } from '../src/request'
 
 const model = {
   proxyModelId: 'proxy-model',
@@ -106,6 +106,11 @@ describe('response request conversion', () => {
       }],
       stream: true,
       max_output_tokens: 4096,
+      prompt_cache_key: buildPromptCacheKey(model, [{
+        role: LanguageModelChatMessageRole.User,
+        content: [new LanguageModelTextPart('hello')],
+        name: undefined,
+      }], 'test'),
       reasoning: { effort: 'high', summary: 'auto' },
       tools: [{
         type: 'function',
@@ -119,6 +124,36 @@ describe('response request conversion', () => {
     })
   })
 
+  it('keeps prompt cache keys stable across turns in the same chat seed', () => {
+    const firstTurn = [{
+      role: LanguageModelChatMessageRole.User,
+      content: [new LanguageModelTextPart('hello')],
+      name: undefined,
+    }]
+    const secondTurn = [
+      ...firstTurn,
+      {
+        role: LanguageModelChatMessageRole.Assistant,
+        content: [new LanguageModelTextPart('hi')],
+        name: undefined,
+      },
+      {
+        role: LanguageModelChatMessageRole.User,
+        content: [new LanguageModelTextPart('next')],
+        name: undefined,
+      },
+    ]
+
+    const key = buildPromptCacheKey(model, firstTurn, 'test')
+
+    expect(key).toMatch(/^modelprovider-[a-f0-9]{32}$/)
+    expect(buildPromptCacheKey(model, secondTurn, 'test')).toBe(key)
+    expect(buildRequest(model, firstTurn, {
+      requestInitiator: 'test',
+      toolMode: LanguageModelChatToolMode.Auto,
+    }).prompt_cache_key).toBe(key)
+  })
+
   it('omits unsupported reasoning and supplies a default tool schema', () => {
     const request = buildRequest(model, [], {
       requestInitiator: 'test',
@@ -127,6 +162,7 @@ describe('response request conversion', () => {
     }, 'medium')
 
     expect(request).not.toHaveProperty('reasoning')
+    expect(request).not.toHaveProperty('prompt_cache_key')
     expect(request).toMatchObject({
       tools: [{
         name: 'empty',

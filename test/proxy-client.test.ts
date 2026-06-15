@@ -140,6 +140,27 @@ describe('cLIProxyClient', () => {
     expect(handlers.onUsage).toHaveBeenCalledWith({ output_tokens: 2 })
   })
 
+  it('forwards prompt cache keys as CLIProxyAPI session hints', async () => {
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(new Response(event({ type: 'response.completed' })))
+    vi.stubGlobal('fetch', fetchMock)
+    const { CLIProxyClient } = await import('../src/proxy-client')
+
+    await new CLIProxyClient('http://proxy', 'key').streamResponse(
+      { model: 'x', prompt_cache_key: 'modelprovider-cache-key' },
+      callbacks(),
+      new AbortController().signal,
+    )
+
+    const init = fetchMock.mock.calls[0]?.[1]
+    const headers = init?.headers as Record<string, string>
+    expect(headers).toEqual({
+      'Authorization': 'Bearer key',
+      'Content-Type': 'application/json',
+      'Session_id': 'modelprovider-cache-key',
+    })
+  })
+
   it('emits completed pending calls and preserves invalid or scalar arguments', async () => {
     const body = [
       event({

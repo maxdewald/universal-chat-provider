@@ -4,6 +4,7 @@ import type {
 } from 'vscode'
 import type { ProviderModel } from './model'
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 import {
   LanguageModelChatMessageRole,
   LanguageModelChatToolMode,
@@ -20,11 +21,13 @@ export function buildRequest(
   options: ProvideLanguageModelChatResponseOptions,
   reasoningEffort?: string,
 ): Record<string, unknown> {
+  const promptCacheKey = buildPromptCacheKey(model, messages, options.requestInitiator)
   const request: Record<string, unknown> = {
     model: model.proxyModelId,
     input: messages.flatMap(convertMessage),
     stream: true,
     max_output_tokens: model.maxOutputTokens,
+    ...(promptCacheKey !== undefined ? { prompt_cache_key: promptCacheKey } : {}),
   }
 
   if (reasoningEffort !== undefined && model.reasoningLevels.includes(reasoningEffort))
@@ -43,6 +46,27 @@ export function buildRequest(
   }
 
   return request
+}
+
+export function buildPromptCacheKey(
+  model: ProviderModel,
+  messages: readonly LanguageModelChatRequestMessage[],
+  requestInitiator?: string,
+): string | undefined {
+  const seed = sessionSeed(messages)
+  if (seed === undefined)
+    return undefined
+
+  const hash = createHash('sha256')
+    .update('modelprovider:prompt-cache:v1\0')
+    .update(model.proxyModelId)
+    .update('\0')
+    .update(requestInitiator ?? '')
+    .update('\0')
+    .update(seed)
+    .digest('hex')
+    .slice(0, 32)
+  return `modelprovider-${hash}`
 }
 
 export function buildTextRequest(
@@ -120,4 +144,44 @@ function serializeToolResult(part: LanguageModelToolResultPart): string {
     }
     return JSON.stringify(value)
   }).join('\n')
+}
+
+function sessionSeed(messages: readonly LanguageModelChatRequestMessage[]): string | undefined {
+  const leadingUserMessages: string[] = []
+  for (const message of messages) {
+    if (message.role === LanguageModelChatMessageRole.Assistant)
+      break
+
+    const fingerprint = messageFingerprint(message)
+    if (fingerprint !== undefined)
+      leadingUserMessages.push(fingerprint)
+  }
+
+  if (leadingUserMessages.length > 0)
+    return leadingUserMessages.join('\n---\n')
+
+  const first = messages.find(message => message.role !== LanguageModelChatMessageRole.Assistant)
+  return first !== undefined ? messageFingerprint(first) : undefined
+}
+
+function messageFingerprint(message: LanguageModelChatRequestMessage): string | undefined {
+  const parts = message.content.map(partFingerprint).filter(value => value !== undefined)
+  if (parts.length === 0)
+    return undefined
+  return `${message.role}:${parts.join('\n')}`
+}
+
+function partFingerprint(part: LanguageModelChatRequestMessage['content'][number]): string | undefined {
+  if (part instanceof LanguageModelTextPart)
+    return `text:${part.value}`
+  if (part instanceof LanguageModelDataPart) {
+    if (part.mimeType.startsWith('text/'))
+      return `data:${part.mimeType}:${new TextDecoder().decode(part.data)}`
+    return `data:${part.mimeType}:${createHash('sha256').update(part.data).digest('hex')}`
+  }
+  if (part instanceof LanguageModelToolResultPart)
+    return `tool-result:${part.callId}:${serializeToolResult(part)}`
+  if (part instanceof LanguageModelToolCallPart)
+    return `tool-call:${part.callId}:${part.name}:${JSON.stringify(part.input)}`
+  return undefined
 }

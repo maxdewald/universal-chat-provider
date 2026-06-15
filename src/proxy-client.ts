@@ -77,7 +77,7 @@ export class CLIProxyClient {
   ): Promise<void> {
     const response = await fetch(`${this.baseUrl}/v1/responses`, {
       method: 'POST',
-      headers: this.headers(),
+      headers: this.headers(body),
       body: JSON.stringify(body),
       signal,
     })
@@ -179,11 +179,18 @@ export class CLIProxyClient {
     return await response.json() as T
   }
 
-  private headers(): Record<string, string> {
-    return {
+  private headers(body?: Record<string, unknown>): Record<string, string> {
+    const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
     }
+
+    const promptCacheKey = stringValue(body?.prompt_cache_key)
+    if (promptCacheKey !== undefined && promptCacheKey.length > 0) {
+      headers.Session_id = promptCacheKey
+    }
+
+    return headers
   }
 }
 

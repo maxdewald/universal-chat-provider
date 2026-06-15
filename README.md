@@ -77,6 +77,14 @@ It reports:
 - all reported reasoning efforts through the native selector
 - streaming text, thinking summaries, tool calls, and usage
 
+Chat requests include a stable `prompt_cache_key` derived from the initial chat
+seed. CLIProxyAPI uses it for Codex prompt-cache reuse and reasoning replay
+cache lookup. The same value is sent as `Session_id` so optional
+`session-affinity` auth selection stays sticky without relying on changing
+message-history hashes. Cache effectiveness can be checked in the provider
+output usage lines; CLIProxyAPI reports cached token counts when the upstream
+provider returns them.
+
 VS Code requires custom language model providers to implement
 `provideTokenCount`; it does not tokenize arbitrary provider requests itself.
 This extension uses `js-tiktoken` with `o200k_base` for local estimates. Exact
