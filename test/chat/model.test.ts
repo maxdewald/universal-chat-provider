@@ -30,7 +30,7 @@ describe('model mapping', () => {
     expect(models).toHaveLength(1)
     expect(models[0]).toMatchObject({
       id: 'gpt-5.4',
-      maxInputTokens: 320_000,
+      maxInputTokens: 400_000,
       maxOutputTokens: 128_000,
       totalContextTokens: 400_000,
       maximumContextTokens: 1_000_000,
@@ -194,7 +194,7 @@ describe('model mapping', () => {
       name: 'Catalog Model',
       family: 'vendor',
       version: 'v1',
-      maxInputTokens: 950_000,
+      maxInputTokens: 1_000_000,
       maxOutputTokens: 50_000,
       reasoningLevels: ['none', 'auto', 'low', 'medium', 'high'],
       detail: '1M context · Vendor',
@@ -326,7 +326,7 @@ describe('model mapping', () => {
     expect(models).toHaveLength(1)
     expect(models[0]).toMatchObject({
       id: 'tiny',
-      maxInputTokens: 127_992,
+      maxInputTokens: 128_000,
       maxOutputTokens: 8,
       totalContextTokens: 128_000,
       maximumContextTokens: 128_000,
@@ -350,12 +350,12 @@ describe('model mapping', () => {
       id: 'sized',
       totalContextTokens: 256_000,
       maxOutputTokens: 32_000,
-      maxInputTokens: 224_000,
+      maxInputTokens: 256_000,
     })
     expect(skipped).toEqual(['unsized'])
   })
 
-  it('caps the output reserve so the input budget never collapses near the context size', () => {
+  it('advertises the full context window as input regardless of the reported output cap', () => {
     const [haiku, over] = mapProxyModels(
       [
         // Output cap equal to the window ("whole window usable for output").
@@ -368,9 +368,10 @@ describe('model mapping', () => {
       { defaultMaxOutputTokens: 16_384 },
     )
 
-    // The old formula collapsed these to 1; now input keeps ~80% of the window.
-    expect(haiku).toMatchObject({ id: 'claude-haiku', totalContextTokens: 200_000, maxInputTokens: 160_000 })
-    expect(over).toMatchObject({ id: 'over-reported', totalContextTokens: 100_000, maxInputTokens: 80_000 })
+    // `maxInputTokens` is a separate dimension from output; carving a reserve out
+    // of it only made Copilot compact early, so input always gets the full window.
+    expect(haiku).toMatchObject({ id: 'claude-haiku', totalContextTokens: 200_000, maxInputTokens: 200_000 })
+    expect(over).toMatchObject({ id: 'over-reported', totalContextTokens: 100_000, maxInputTokens: 100_000 })
   })
 
   it('ignores malformed catalog sections', () => {
