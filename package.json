@@ -107,6 +107,10 @@
       {
         "command": "universalChatProvider.showServerLogs",
         "title": "Universal Chat Provider: Show Server Output"
+      },
+      {
+        "command": "universalChatProvider.openSettings",
+        "title": "Universal Chat Provider: Open Settings"
       }
     ],
     "menus": {
@@ -172,6 +176,11 @@
           "scope": "resource",
           "editPresentation": "multilineText",
           "description": "Optional commit-message instructions. When empty, a single-line Conventional Commits subject (no body) is generated; when set, these instructions replace that style and allow a longer message such as a body."
+        },
+        "universalChatProvider.cacheMetrics.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Record per-request prompt-cache metrics (cache-read vs cache-write vs uncached input tokens, with a hit rate) to a JSONL file in the extension's global storage, and show the running cache-hit rate in the status bar. Off by default; use it to diagnose why running sessions burn through rate limits."
         }
       }
     }

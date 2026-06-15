@@ -105,7 +105,9 @@ describe('language model provider', () => {
     expect(report.mock.calls[0]?.[0]).toEqual(new LanguageModelTextPart('text'))
     expect(report.mock.calls[1]?.[0]).toEqual(new LanguageModelThinkingPart('thinking'))
     expect(report.mock.calls[2]?.[0]).toEqual(new LanguageModelToolCallPart('call', 'lookup', { q: 'x' }))
-    expect(vscodeMock.output.appendLine).toHaveBeenCalledWith('[usage] model-a: {"output_tokens":3}')
+    expect(vscodeMock.output.appendLine).toHaveBeenCalledWith(
+      '[usage] model-a: input=0 cached=0 write=0 output=3 hit=n/a raw={"output_tokens":3}',
+    )
   })
 
   it('completes bounded internal text requests without using the chat selection', async () => {
@@ -137,7 +139,7 @@ describe('language model provider', () => {
       expect.any(AbortSignal),
     )
     expect(vscodeMock.output.appendLine).toHaveBeenCalledWith(
-      '[usage] model-a (commit message): {"output_tokens":4}',
+      '[usage] model-a (commit message): input=0 cached=0 write=0 output=4 hit=n/a raw={"output_tokens":4}',
     )
   })
 

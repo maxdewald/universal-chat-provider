@@ -72,6 +72,11 @@ export async function manageProvider(controller: ServerController | undefined): 
         ],
     [
       {
+        label: '$(gear) Open Settings',
+        description: 'Edit this extension\'s settings',
+        command: 'universalChatProvider.openSettings',
+      },
+      {
         label: '$(output) Show Extension Logs',
         description: 'Diagnostics from the extension itself',
         command: 'universalChatProvider.showLogs',

@@ -21,6 +21,7 @@ import {
 import { SettingsConnection } from '../cliproxy/connection'
 import { CredentialStore } from '../cliproxy/credentials'
 import { asString } from '../shared/json'
+import { CacheMetricsTracker } from './cache-metrics'
 import { streamCompletion } from './completion'
 import { CredentialFlows } from './credential-flows'
 import { ModelRegistry } from './model-registry'
@@ -32,6 +33,7 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
   private readonly registry: ModelRegistry
   private readonly credentialFlows: CredentialFlows
   private readonly tokenCounter: TokenCounter
+  private readonly cacheMetrics: CacheMetricsTracker
 
   constructor(
     context: ExtensionContext,
@@ -46,6 +48,7 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
     })
     this.credentialFlows = new CredentialFlows(this.credentials, this.registry, output)
     this.tokenCounter = new TokenCounter({ connection, credentials: this.credentials, output })
+    this.cacheMetrics = new CacheMetricsTracker(context, output)
   }
 
   get onDidChangeLanguageModelChatInformation(): Event<void> {
@@ -54,6 +57,7 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
 
   dispose(): void {
     this.registry.dispose()
+    this.cacheMetrics.dispose()
   }
 
   async initialize(): Promise<void> {
@@ -82,15 +86,20 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
     token: CancellationToken,
   ): Promise<void> {
     const reasoningEffort = asString(options.modelConfiguration?.reasoningEffort)
+    const request = buildRequest(model, messages, options, reasoningEffort)
     await streamCompletion(
       this.completionDeps(),
-      buildRequest(model, messages, options, reasoningEffort),
+      request,
       {
         onText: delta => progress.report(new LanguageModelTextPart(delta)),
         onThinking: delta => progress.report(new LanguageModelThinkingPart(delta)),
         onToolCall: (callId, name, input) =>
           progress.report(new LanguageModelToolCallPart(callId, name, input)),
-        onUsage: usage => this.output.appendLine(`[usage] ${model.proxyModelId}: ${JSON.stringify(usage)}`),
+        onUsage: usage => this.cacheMetrics.record(usage, {
+          model: model.proxyModelId,
+          promptCacheKey: asString(request.prompt_cache_key),
+          requestInitiator: options.requestInitiator,
+        }),
       },
       token,
     )
@@ -128,8 +137,10 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
       {
         onText: (delta) => { text += delta },
         onToolCall: () => {},
-        onUsage: usage =>
-          this.output.appendLine(`[usage] ${model.proxyModelId} (commit message): ${JSON.stringify(usage)}`),
+        onUsage: usage => this.cacheMetrics.record(usage, {
+          model: model.proxyModelId,
+          label: 'commit message',
+        }),
       },
       token,
     )
