@@ -129,6 +129,10 @@ export class LanguageModelDataPart {
     return new LanguageModelDataPart(new TextEncoder().encode(value), mimeType)
   }
 
+  static json(value: unknown, mimeType = 'application/json'): LanguageModelDataPart {
+    return new LanguageModelDataPart(new TextEncoder().encode(JSON.stringify(value)), mimeType)
+  }
+
   constructor(
     readonly data: Uint8Array,
     readonly mimeType: string,

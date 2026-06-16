@@ -6,6 +6,7 @@ import {
   CancellationTokenSource,
   LanguageModelChatMessageRole,
   LanguageModelChatToolMode,
+  LanguageModelDataPart,
   LanguageModelError,
   LanguageModelTextPart,
   LanguageModelThinkingPart,
@@ -102,6 +103,16 @@ describe('language model provider', () => {
     expect(report.mock.calls[0]?.[0]).toEqual(new LanguageModelTextPart('text'))
     expect(report.mock.calls[1]?.[0]).toEqual(new LanguageModelThinkingPart('thinking'))
     expect(report.mock.calls[2]?.[0]).toEqual(new LanguageModelToolCallPart('call', 'lookup', { q: 'x' }))
+    // The usage data part drives VS Code's context-window indicator.
+    const usagePart = report.mock.calls[3]?.[0] as LanguageModelDataPart
+    expect(usagePart).toBeInstanceOf(LanguageModelDataPart)
+    expect(usagePart.mimeType).toBe('usage')
+    expect(JSON.parse(new TextDecoder().decode(usagePart.data))).toEqual({
+      prompt_tokens: 0,
+      completion_tokens: 3,
+      total_tokens: 3,
+      prompt_tokens_details: { cached_tokens: 0 },
+    })
     expect(vscodeMock.output.appendLine).toHaveBeenCalledWith(
       '[usage] model-a: input=0 cached=0 write=0 output=3 hit=n/a raw={"output_tokens":3}',
     )

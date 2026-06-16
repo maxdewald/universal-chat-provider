@@ -23,6 +23,7 @@ import { CredentialStore } from '../cliproxy/credentials'
 import { asString } from '../shared/json'
 import { CacheMetricsTracker } from './cache-metrics'
 import { streamCompletion } from './completion'
+import { createContextUsagePart } from './context-usage'
 import { CredentialFlows } from './credential-flows'
 import { estimateTokens } from './estimate'
 import { ModelRegistry } from './model-registry'
@@ -93,11 +94,16 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
         onThinking: delta => progress.report(new LanguageModelThinkingPart(delta)),
         onToolCall: (callId, name, input) =>
           progress.report(new LanguageModelToolCallPart(callId, name, input)),
-        onUsage: usage => this.cacheMetrics.record(usage, {
-          model: model.proxyModelId,
-          promptCacheKey: asString(request.prompt_cache_key),
-          requestInitiator: options.requestInitiator,
-        }),
+        onUsage: (usage) => {
+          this.cacheMetrics.record(usage, {
+            model: model.proxyModelId,
+            promptCacheKey: asString(request.prompt_cache_key),
+            requestInitiator: options.requestInitiator,
+          })
+          const part = createContextUsagePart(usage)
+          if (part !== undefined)
+            progress.report(part)
+        },
       },
       token,
     )
