@@ -26,8 +26,8 @@ export interface ManagedState {
 export interface ProvisionOptions {
   context: ExtensionContext
   output: OutputChannel
-  /** Pinned binary version or `latest`, resolved at provision time. */
-  requestedVersion: string
+  /** Pinned binary version or `latest`, read fresh on each acquire/restart. */
+  requestedVersion: () => string
   /** Confirms an already-healthy server on a port is ours before adopting it. */
   verifyOwnership: (baseUrl: string) => Promise<boolean>
 }

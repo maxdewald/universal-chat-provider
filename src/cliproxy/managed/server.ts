@@ -19,8 +19,8 @@ export interface ServerDeps {
   paths: ManagedPaths
   output: OutputChannel
   host: string
-  /** Pinned binary version or `latest`. */
-  requestedVersion: string
+  /** Pinned binary version or `latest`, read fresh so a config bump (e.g. after an update) takes effect on restart. */
+  requestedVersion: () => string
   getPort: () => number | undefined
   setPort: (port: number) => void | Thenable<void>
   /**
@@ -142,7 +142,7 @@ export class ManagedServer {
 
     const { binaryPath, version } = await acquireBinary({
       binDir: this.deps.paths.binDir,
-      requestedVersion: this.deps.requestedVersion,
+      requestedVersion: this.deps.requestedVersion(),
       output: this.deps.output,
       ...(signal ? { signal } : {}),
     })
