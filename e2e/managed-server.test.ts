@@ -147,7 +147,7 @@ async function makeServer(
     paths,
     output,
     host: HOST,
-    requestedVersion: DEFAULT_BINARY_VERSION,
+    requestedVersion: () => DEFAULT_BINARY_VERSION,
     getPort: () => persisted ?? preferred,
     setPort: (port) => { persisted = port },
     ...overrides,

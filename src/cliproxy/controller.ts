@@ -262,7 +262,7 @@ export class ServerController implements ProxyConnection {
     const state = await provisionManagedState({
       context: this.context,
       output: this.output,
-      requestedVersion: this.requestedVersion(),
+      requestedVersion: () => this.requestedVersion(),
       verifyOwnership: async baseUrl => this.isOwnServer(baseUrl),
     })
     this.paths = state.paths
