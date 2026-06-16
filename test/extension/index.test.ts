@@ -1,7 +1,6 @@
 import type { ExtensionContext } from 'vscode'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UniversalChatProvider } from '../../src/chat/provider'
-import { CommitMessageService } from '../../src/commit/service'
 import { activate, deactivate } from '../../src/index'
 import {
   commands,
@@ -21,26 +20,23 @@ describe('extension activation', () => {
     const configure = vi.spyOn(UniversalChatProvider.prototype, 'configure').mockResolvedValue()
     const importConfig = vi.spyOn(UniversalChatProvider.prototype, 'importConfig').mockResolvedValue()
     const forceRefresh = vi.spyOn(UniversalChatProvider.prototype, 'forceRefresh').mockResolvedValue([])
-    const generateCommitMessage = vi.spyOn(CommitMessageService.prototype, 'generate').mockResolvedValue()
-    const selectCommitMessageModel = vi.spyOn(CommitMessageService.prototype, 'selectModel').mockResolvedValue(undefined)
+    const getModels = vi.spyOn(UniversalChatProvider.prototype, 'getModels').mockResolvedValue([])
     const context = extensionContext()
 
     expect(activate(context)).toBeUndefined()
     expect(vscodeMock.registeredProviders[0]).toMatchObject({ vendor: 'universal-chat-provider' })
-    expect(vscodeMock.commandHandlers.size).toBe(15)
-    expect(context.subscriptions).toHaveLength(21)
+    expect(vscodeMock.commandHandlers.size).toBe(14)
+    expect(context.subscriptions).toHaveLength(20)
     expect(initialize).toHaveBeenCalledTimes(1)
 
     await commands.executeCommand('universalChatProvider.configure')
     await commands.executeCommand('universalChatProvider.importConfig')
     await commands.executeCommand('universalChatProvider.refresh')
-    await commands.executeCommand('universalChatProvider.generateCommitMessage')
-    await commands.executeCommand('universalChatProvider.selectCommitMessageModel')
+    await commands.executeCommand('universalChatProvider.setUtilityModel')
     expect(configure).toHaveBeenCalled()
     expect(importConfig).toHaveBeenCalled()
     expect(forceRefresh).toHaveBeenCalledWith(true)
-    expect(generateCommitMessage).toHaveBeenCalled()
-    expect(selectCommitMessageModel).toHaveBeenCalled()
+    expect(getModels).toHaveBeenCalled()
     expect(window.showInformationMessage).toHaveBeenCalledWith('CLIProxyAPI exposed 0 chat models.')
   })
 

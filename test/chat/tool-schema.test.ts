@@ -1,39 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeToolSchema } from '../../src/chat/tool-schema'
+import { sanitizeGeminiToolSchema } from '../../src/chat/tool-schema'
 
-describe('tool schema normalization', () => {
-  it('keeps a portable schema subset and drops unknown annotations automatically', () => {
-    expect(normalizeToolSchema({
+describe('gemini tool schema sanitization', () => {
+  it('recursively drops fields Gemini rejects while keeping the constraints', () => {
+    expect(sanitizeGeminiToolSchema({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
       $comment: 'root metadata',
       type: 'object',
-      title: 'Lookup input',
-      additionalProperties: false,
       properties: {
         mode: {
           type: 'string',
           description: 'Lookup mode',
           enum: ['fast', 'thorough'],
-          enumDescriptions: ['Use less time', 'Use more time'],
-          default: 'fast',
-        },
-        count: {
-          type: 'integer',
-          minimum: 1,
-          maximum: 10,
+          enumDescriptions: ['Quick', 'Thorough'],
+          markdownDescription: '**mode**',
         },
         tags: {
           type: 'array',
-          items: {
-            type: ['string', 'null'],
-            pattern: '^[a-z]+$',
-          },
-        },
-        $comment: {
-          type: 'string',
-          description: 'A real property named $comment',
+          items: { $comment: 'tag', type: 'string', pattern: '^[a-z]+$' },
         },
       },
-      required: ['mode', 'missing', 'mode'],
+      required: ['mode'],
     })).toEqual({
       type: 'object',
       properties: {
@@ -42,33 +29,20 @@ describe('tool schema normalization', () => {
           description: 'Lookup mode',
           enum: ['fast', 'thorough'],
         },
-        count: {
-          type: 'integer',
-        },
         tags: {
           type: 'array',
-          items: {
-            type: 'string',
-          },
-        },
-        $comment: {
-          type: 'string',
-          description: 'A real property named $comment',
+          items: { type: 'string', pattern: '^[a-z]+$' },
         },
       },
       required: ['mode'],
     })
   })
 
-  it('always produces an object parameter schema', () => {
-    expect(normalizeToolSchema({
-      anyOf: [
-        { type: 'string' },
-        { type: 'number' },
-      ],
-    })).toEqual({
-      type: 'object',
-      properties: {},
-    })
+  it('leaves combinators and refs intact', () => {
+    const schema = {
+      anyOf: [{ type: 'string' }, { type: 'number' }],
+      $defs: { name: { type: 'string' } },
+    }
+    expect(sanitizeGeminiToolSchema(schema)).toEqual(schema)
   })
 })

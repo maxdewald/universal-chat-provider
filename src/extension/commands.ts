@@ -1,21 +1,20 @@
 import type { Disposable, OutputChannel } from 'vscode'
 import type { UniversalChatProvider } from '../chat/provider'
 import type { ServerController } from '../cliproxy/controller'
-import type { CommitMessageService } from '../commit/service'
 import { commands, window } from 'vscode'
+import { setUtilityModel } from '../chat/utility-model-nudge'
 import { extensionId } from '../generated/meta'
 import { manageProvider } from './manage-menu'
 
 export interface CommandDeps {
   provider: UniversalChatProvider
   controller: ServerController
-  commitMessages: CommitMessageService
   output: OutputChannel
   serverOutput: OutputChannel
 }
 
 export function registerCommands(deps: CommandDeps): Disposable[] {
-  const { provider, controller, commitMessages, output, serverOutput } = deps
+  const { provider, controller, output, serverOutput } = deps
   return [
     commands.registerCommand('universalChatProvider.manage', async () => manageProvider(controller)),
     commands.registerCommand('universalChatProvider.login', async () => {
@@ -43,11 +42,8 @@ export function registerCommands(deps: CommandDeps): Disposable[] {
     commands.registerCommand('universalChatProvider.resetServer', async () => {
       await controller.resetServer()
     }),
-    commands.registerCommand('universalChatProvider.generateCommitMessage', async (...args: Parameters<CommitMessageService['generate']>) => {
-      await commitMessages.generate(...args)
-    }),
-    commands.registerCommand('universalChatProvider.selectCommitMessageModel', async () => {
-      await commitMessages.selectModel()
+    commands.registerCommand('universalChatProvider.setUtilityModel', async () => {
+      await setUtilityModel(provider)
     }),
     commands.registerCommand('universalChatProvider.clearCredentials', async () => {
       const choice = await window.showWarningMessage(

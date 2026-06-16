@@ -355,6 +355,7 @@ function model(): ProviderModel {
     totalContextTokens: 120,
     maximumContextTokens: 120,
     reasoningLevels: ['low', 'high'],
+    supportsParallelToolCalls: true,
     isUserSelectable: true,
     isBYOK: true,
     capabilities: {

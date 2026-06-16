@@ -118,18 +118,16 @@ VS Code requires custom providers to implement `provideTokenCount`. Rather than 
 
 <!-- configs -->
 
-| Key                                                | Description                                                                                                                                                                                                                                                                                               | Type      | Default                   |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
-| `universalChatProvider.server.mode`                | How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance.                                                                                                                                                                                              | `string`  | `"managed"`               |
-| `universalChatProvider.server.version`             | CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases.                                                                                                                                                                            | `string`  | `"7.2.5"`                 |
-| `universalChatProvider.server.suggestUpdates`      | When a pinned managed server has a newer release within the same major version, offer to update to it. New major versions are never suggested automatically. No effect with 'latest' or in external mode.                                                                                                 | `boolean` | `true`                    |
-| `universalChatProvider.baseUrl`                    | Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port.                                                                                                                                                                                                    | `string`  | `"http://127.0.0.1:8317"` |
-| `universalChatProvider.configPath`                 | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                                                                                                                                                                                     | `string`  | `""`                      |
-| `universalChatProvider.autoDetectConfig`           | Search common local CLIProxyAPI config locations when no config path is set.                                                                                                                                                                                                                              | `boolean` | `true`                    |
-| `universalChatProvider.defaultMaxOutputTokens`     | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                                                                                                                                                                            | `number`  | `16384`                   |
-| `universalChatProvider.commitMessage.model`        | Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models.                                                                                                                                                                  | `string`  | `""`                      |
-| `universalChatProvider.commitMessage.instructions` | Optional commit-message instructions. When empty, a single-line Conventional Commits subject (no body) is generated; when set, these instructions replace that style and allow a longer message such as a body.                                                                                           | `string`  | `""`                      |
-| `universalChatProvider.cacheMetrics.enabled`       | Record per-request prompt-cache metrics (cache-read vs cache-write vs uncached input tokens, with a hit rate) to a JSONL file in the extension's global storage, and show the running cache-hit rate in the status bar. Off by default; use it to diagnose why running sessions burn through rate limits. | `boolean` | `false`                   |
+| Key                                            | Description                                                                                                                                                                                                                                                                                               | Type      | Default                   |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------- |
+| `universalChatProvider.server.mode`            | How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance.                                                                                                                                                                                              | `string`  | `"managed"`               |
+| `universalChatProvider.server.version`         | CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases.                                                                                                                                                                            | `string`  | `"7.2.5"`                 |
+| `universalChatProvider.server.suggestUpdates`  | When a pinned managed server has a newer release within the same major version, offer to update to it. New major versions are never suggested automatically. No effect with 'latest' or in external mode.                                                                                                 | `boolean` | `true`                    |
+| `universalChatProvider.baseUrl`                | Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port.                                                                                                                                                                                                    | `string`  | `"http://127.0.0.1:8317"` |
+| `universalChatProvider.configPath`             | Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery.                                                                                                                                                                                                                     | `string`  | `""`                      |
+| `universalChatProvider.autoDetectConfig`       | Search common local CLIProxyAPI config locations when no config path is set.                                                                                                                                                                                                                              | `boolean` | `true`                    |
+| `universalChatProvider.defaultMaxOutputTokens` | Fallback output-token limit when CLIProxyAPI provides no model-specific value.                                                                                                                                                                                                                            | `number`  | `16384`                   |
+| `universalChatProvider.cacheMetrics.enabled`   | Record per-request prompt-cache metrics (cache-read vs cache-write vs uncached input tokens, with a hit rate) to a JSONL file in the extension's global storage, and show the running cache-hit rate in the status bar. Off by default; use it to diagnose why running sessions burn through rate limits. | `boolean` | `false`                   |
 
 <!-- configs -->
 
@@ -140,23 +138,22 @@ VS Code requires custom providers to implement `provideTokenCount`. Rather than 
 
 <!-- commands -->
 
-| Command                                          | Title                                                |
-| ------------------------------------------------ | ---------------------------------------------------- |
-| `universalChatProvider.manage`                   | Universal Chat Provider: Manage Provider             |
-| `universalChatProvider.login`                    | Universal Chat Provider: Add Account (Login)         |
-| `universalChatProvider.manageAccounts`           | Universal Chat Provider: Manage Accounts             |
-| `universalChatProvider.restartServer`            | Universal Chat Provider: Restart Managed Server      |
-| `universalChatProvider.updateBinary`             | Universal Chat Provider: Update Proxy Binary         |
-| `universalChatProvider.resetServer`              | Universal Chat Provider: Reset Managed Server        |
-| `universalChatProvider.configure`                | Universal Chat Provider: Configure Connection        |
-| `universalChatProvider.importConfig`             | Universal Chat Provider: Import API Key from Config  |
-| `universalChatProvider.refresh`                  | Universal Chat Provider: Refresh Models              |
-| `universalChatProvider.generateCommitMessage`    | Universal Chat Provider: Generate Commit Message     |
-| `universalChatProvider.selectCommitMessageModel` | Universal Chat Provider: Select Commit Message Model |
-| `universalChatProvider.clearCredentials`         | Universal Chat Provider: Clear Stored API Key        |
-| `universalChatProvider.showLogs`                 | Universal Chat Provider: Show Logs                   |
-| `universalChatProvider.showServerLogs`           | Universal Chat Provider: Show Server Output          |
-| `universalChatProvider.openSettings`             | Universal Chat Provider: Open Settings               |
+| Command                                  | Title                                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------------------ |
+| `universalChatProvider.manage`           | Universal Chat Provider: Manage Provider                                             |
+| `universalChatProvider.login`            | Universal Chat Provider: Add Account (Login)                                         |
+| `universalChatProvider.manageAccounts`   | Universal Chat Provider: Manage Accounts                                             |
+| `universalChatProvider.restartServer`    | Universal Chat Provider: Restart Managed Server                                      |
+| `universalChatProvider.updateBinary`     | Universal Chat Provider: Update Proxy Binary                                         |
+| `universalChatProvider.resetServer`      | Universal Chat Provider: Reset Managed Server                                        |
+| `universalChatProvider.configure`        | Universal Chat Provider: Configure Connection                                        |
+| `universalChatProvider.importConfig`     | Universal Chat Provider: Import API Key from Config                                  |
+| `universalChatProvider.refresh`          | Universal Chat Provider: Refresh Models                                              |
+| `universalChatProvider.setUtilityModel`  | Universal Chat Provider: Set Utility Model (commit messages, chat titles, summaries) |
+| `universalChatProvider.clearCredentials` | Universal Chat Provider: Clear Stored API Key                                        |
+| `universalChatProvider.showLogs`         | Universal Chat Provider: Show Logs                                                   |
+| `universalChatProvider.showServerLogs`   | Universal Chat Provider: Show Server Output                                          |
+| `universalChatProvider.openSettings`     | Universal Chat Provider: Open Settings                                               |
 
 <!-- commands -->
 

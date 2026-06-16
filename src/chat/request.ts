@@ -13,7 +13,7 @@ import {
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
 } from 'vscode'
-import { normalizeToolSchema } from './tool-schema'
+import { sanitizeGeminiToolSchema } from './tool-schema'
 
 export function buildRequest(
   model: ProviderModel,
@@ -34,18 +34,30 @@ export function buildRequest(
     request.reasoning = { effort: reasoningEffort, summary: 'auto' }
 
   if (options.tools !== undefined && options.tools.length > 0) {
-    request.tools = options.tools.map(tool => ({
-      type: 'function',
-      name: tool.name,
-      description: tool.description,
-      parameters: normalizeToolSchema(tool.inputSchema ?? {}),
-      strict: false,
-    }))
+    const gemini = targetsGemini(model)
+    request.tools = options.tools.map((tool) => {
+      const parameters = tool.inputSchema ?? { type: 'object', properties: {} }
+      return {
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: gemini ? sanitizeGeminiToolSchema(parameters) : parameters,
+        strict: false,
+      }
+    })
     request.tool_choice = options.toolMode === LanguageModelChatToolMode.Required ? 'required' : 'auto'
-    request.parallel_tool_calls = true
+    request.parallel_tool_calls = model.supportsParallelToolCalls
   }
 
   return request
+}
+
+// CLIProxyAPI forwards rich JSON Schema to Gemini intact, but Google's API
+// rejects fields it doesn't recognise — so a Gemini-bound request needs its tool
+// schemas pruned (see sanitizeGeminiToolSchema). Antigravity also serves Gemini
+// models, so we key off the model identity rather than the proxy backend.
+function targetsGemini(model: ProviderModel): boolean {
+  return /gemini|google/i.test(`${model.family} ${model.proxyModelId}`)
 }
 
 export function buildPromptCacheKey(

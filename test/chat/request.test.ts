@@ -14,6 +14,7 @@ const model = {
   proxyModelId: 'proxy-model',
   maxOutputTokens: 4096,
   reasoningLevels: ['low', 'high'],
+  supportsParallelToolCalls: true,
 } as unknown as ProviderModel
 
 describe('response request conversion', () => {
@@ -116,7 +117,11 @@ describe('response request conversion', () => {
         type: 'function',
         name: 'lookup',
         description: 'Look up a value',
-        parameters: { type: 'object', properties: { q: { type: 'string' } } },
+        parameters: {
+          $comment: 'tool metadata',
+          type: 'object',
+          properties: { q: { type: 'string', enumDescriptions: ['Query text'] } },
+        },
         strict: false,
       }],
       tool_choice: 'required',
@@ -170,6 +175,44 @@ describe('response request conversion', () => {
       }],
       tool_choice: 'auto',
     })
+  })
+
+  it('strips Gemini-incompatible schema fields only for Gemini models', () => {
+    const geminiModel = {
+      proxyModelId: 'gemini-3-flash',
+      family: 'google',
+      maxOutputTokens: 4096,
+      reasoningLevels: [],
+      supportsParallelToolCalls: false,
+    } as unknown as ProviderModel
+
+    const request = buildRequest(geminiModel, [], {
+      requestInitiator: 'test',
+      toolMode: LanguageModelChatToolMode.Auto,
+      tools: [{
+        name: 'lookup',
+        description: 'Look up a value',
+        inputSchema: {
+          $comment: 'tool metadata',
+          type: 'object',
+          properties: {
+            mode: { type: 'string', enum: ['fast', 'slow'], enumDescriptions: ['Quick', 'Thorough'] },
+          },
+        },
+      }],
+    })
+
+    expect(request.tools).toEqual([{
+      type: 'function',
+      name: 'lookup',
+      description: 'Look up a value',
+      parameters: {
+        type: 'object',
+        properties: { mode: { type: 'string', enum: ['fast', 'slow'] } },
+      },
+      strict: false,
+    }])
+    expect(request.parallel_tool_calls).toBe(false)
   })
 
   it('builds a bounded plain-text request for internal features', () => {

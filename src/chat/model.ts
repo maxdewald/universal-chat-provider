@@ -35,6 +35,7 @@ export interface ProviderModel extends LanguageModelChatInformation {
   totalContextTokens: number
   maximumContextTokens: number
   reasoningLevels: readonly string[]
+  supportsParallelToolCalls: boolean
 }
 
 export interface ModelMappingOptions {
@@ -116,9 +117,15 @@ export function mapProxyModels(
     const imageInput = detail?.input_modalities?.includes('image')
       ?? catalogModel?.supportedInputModalities?.some(value => value.toLowerCase() === 'image')
       ?? false
-    const toolCalling = detail?.supports_parallel_tool_calls
-      ?? catalogModel?.supported_parameters?.includes('tools')
-      ?? true
+    // `supports_parallel_tool_calls` is the only tool-related flag the proxy
+    // reports, so its presence (true or false) means the model does tool calls;
+    // its value only decides whether several may run in one turn.
+    const parallelToolCalls = detail?.supports_parallel_tool_calls
+    const supportsParallelToolCalls = parallelToolCalls ?? true
+    const toolCalling = parallelToolCalls !== undefined
+      || (catalogModel?.supported_parameters?.includes('tools') ?? true)
+    const family = catalogModel?.type ?? inferFamily(entry.id)
+    const editTools = toolCalling ? preferredEditTools(family, entry.id) : undefined
     const description = detail?.description ?? catalogModel?.description
     const tooltip = buildTooltip(displayName, description, displayProviderName, outputTokens, imageInput, toolCalling)
 
@@ -126,7 +133,7 @@ export function mapProxyModels(
       id: entry.id,
       proxyModelId: entry.id,
       name: displayName,
-      family: catalogModel?.type ?? inferFamily(entry.id),
+      family,
       version: catalogModel?.version ?? entry.id,
       // The full context window. `maxInputTokens` is the only field VS Code
       // budgets against — Copilot compacts as the prompt approaches it — and is
@@ -138,6 +145,7 @@ export function mapProxyModels(
       totalContextTokens: totalContext,
       maximumContextTokens: maximumContext,
       reasoningLevels: reasoning.levels,
+      supportsParallelToolCalls,
       detail: `${formatTokens(totalContext)} context · ${displayProviderName}`,
       tooltip,
       isBYOK: true,
@@ -146,7 +154,7 @@ export function mapProxyModels(
       capabilities: {
         imageInput,
         toolCalling,
-        ...(toolCalling ? { editTools: ['apply-patch'] } : {}),
+        ...(editTools ? { editTools } : {}),
       },
     })
   }
@@ -288,6 +296,19 @@ function normalizeReasoningModelName(name: string, levels: readonly string[]): s
   if (levels.length < 2)
     return name
   return name.replace(REASONING_NAME_SUFFIX, '')
+}
+
+// Match Copilot's own per-family edit-tool defaults: apply-patch suits OpenAI
+// models, find/replace suits Claude. For other families (e.g. Gemini) we leave
+// it unset so Copilot's edit-tool learning picks what the model handles best
+// rather than forcing a format it edits poorly with.
+function preferredEditTools(family: string, id: string): string[] | undefined {
+  const key = `${family} ${id}`.toLowerCase()
+  if (/gpt|openai|codex/.test(key))
+    return ['apply-patch']
+  if (/claude|anthropic|sonnet|opus|haiku/.test(key))
+    return ['find-replace', 'multi-find-replace']
+  return undefined
 }
 
 function inferFamily(id: string): string {

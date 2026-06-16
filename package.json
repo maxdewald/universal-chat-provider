@@ -88,13 +88,8 @@
         "title": "Universal Chat Provider: Refresh Models"
       },
       {
-        "command": "universalChatProvider.generateCommitMessage",
-        "title": "Universal Chat Provider: Generate Commit Message",
-        "icon": "$(sparkle)"
-      },
-      {
-        "command": "universalChatProvider.selectCommitMessageModel",
-        "title": "Universal Chat Provider: Select Commit Message Model"
+        "command": "universalChatProvider.setUtilityModel",
+        "title": "Universal Chat Provider: Set Utility Model (commit messages, chat titles, summaries)"
       },
       {
         "command": "universalChatProvider.clearCredentials",
@@ -113,14 +108,6 @@
         "title": "Universal Chat Provider: Open Settings"
       }
     ],
-    "menus": {
-      "scm/inputBox": [
-        {
-          "command": "universalChatProvider.generateCommitMessage",
-          "when": "scmProvider == git"
-        }
-      ]
-    },
     "configuration": {
       "type": "object",
       "title": "Universal Chat Provider",
@@ -169,19 +156,6 @@
           "minimum": 1024,
           "description": "Fallback output-token limit when CLIProxyAPI provides no model-specific value."
         },
-        "universalChatProvider.commitMessage.model": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "Model ID used only for commit-message generation. Use the Select Commit Message Model command to choose from currently available models."
-        },
-        "universalChatProvider.commitMessage.instructions": {
-          "type": "string",
-          "default": "",
-          "scope": "resource",
-          "editPresentation": "multilineText",
-          "description": "Optional commit-message instructions. When empty, a single-line Conventional Commits subject (no body) is generated; when set, these instructions replace that style and allow a longer message such as a body."
-        },
         "universalChatProvider.cacheMetrics.enabled": {
           "type": "boolean",
           "default": false,
@@ -195,7 +169,7 @@
     "dev": "tsdown --watch --sourcemap",
     "prepare": "pnpm generate",
     "generate": "vscode-ext-gen --output src/generated/meta.ts",
-    "vscode:dts": "dts main && dts dev",
+    "vscode:dts": "dts dev",
     "lint": "eslint .",
     "test": "vitest run --project test:unit",
     "test:e2e": "vitest run --project test:e2e",
@@ -223,6 +197,7 @@
     "@antfu/eslint-config": "^9.0.0",
     "@types/node": "^24.13.2",
     "@types/semver": "^7.7.1",
+    "@types/vscode": "^1.120.0",
     "@vitest/coverage-v8": "^4.1.8",
     "@vscode/dts": "^0.4.1",
     "@vscode/vsce": "^3.9.2",

@@ -1,8 +1,8 @@
 import type { ExtensionContext } from 'vscode'
 import { lm, window } from 'vscode'
 import { UniversalChatProvider } from './chat/provider'
+import { maybeSuggestUtilityModel } from './chat/utility-model-nudge'
 import { ServerController } from './cliproxy/controller'
-import { CommitMessageService } from './commit/service'
 import { registerCommands } from './extension/commands'
 import { createStatusBar, updateStatusBar } from './extension/status-bar'
 
@@ -16,7 +16,6 @@ export function activate(context: ExtensionContext): void {
   const serverOutput = window.createOutputChannel('CLIProxyAPI Server')
   controller = new ServerController(context, output, serverOutput)
   provider = new UniversalChatProvider(context, output, controller)
-  const commitMessages = new CommitMessageService(provider)
 
   const statusBar = createStatusBar()
   controller.setRefreshListener(() => void provider?.forceRefresh(false))
@@ -29,11 +28,12 @@ export function activate(context: ExtensionContext): void {
     statusBar,
     provider,
     lm.registerLanguageModelChatProvider('universal-chat-provider', provider),
-    ...registerCommands({ provider, controller, commitMessages, output, serverOutput }),
+    ...registerCommands({ provider, controller, output, serverOutput }),
   )
 
   statusBar.show()
   void provider.initialize()
+  void maybeSuggestUtilityModel(context)
 }
 
 export function deactivate(): void {

@@ -35,9 +35,9 @@ export async function manageProvider(controller: ServerController | undefined): 
         command: 'universalChatProvider.refresh',
       },
       {
-        label: '$(sparkle) Select Commit Message Model',
-        description: 'Model used for commit messages',
-        command: 'universalChatProvider.selectCommitMessageModel',
+        label: '$(sparkle) Set Utility Model',
+        description: 'Run Copilot\'s commit messages, titles & summaries on your models',
+        command: 'universalChatProvider.setUtilityModel',
       },
     ],
     managed

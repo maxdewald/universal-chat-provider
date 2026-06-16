@@ -5,7 +5,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "types": ["node"],
+    "types": ["node", "vscode"],
     "strict": true,
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,
@@ -19,7 +19,6 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "e2e/**/*.ts",
-    "vscode.d.ts",
     "vscode.proposed.*.d.ts",
     "*.ts"
   ]
