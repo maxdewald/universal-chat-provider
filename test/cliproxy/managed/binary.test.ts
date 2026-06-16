@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { normalizeVersion, parseChecksums, resolveAsset, sha256 } from '../../../src/cliproxy/managed/binary'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { normalizeVersion, parseChecksums, readInstalledVersion, resolveAsset, sha256 } from '../../../src/cliproxy/managed/binary'
 
 describe('binary asset resolution', () => {
   it('maps platform and arch to the matching release asset', () => {
@@ -40,5 +43,30 @@ describe('binary asset resolution', () => {
     expect(normalizeVersion('  7.2.5 ')).toBe('7.2.5')
     expect(sha256(new TextEncoder().encode('abc')))
       .toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+  })
+})
+
+describe('readInstalledVersion', () => {
+  let binDir: string
+
+  beforeEach(async () => {
+    binDir = await mkdtemp(join(tmpdir(), 'ucp-bin-'))
+  })
+
+  afterEach(async () => {
+    await rm(binDir, { recursive: true, force: true })
+  })
+
+  it('returns undefined when the directory is missing or has no version dirs', async () => {
+    expect(await readInstalledVersion(join(binDir, 'absent'))).toBeUndefined()
+    await mkdir(join(binDir, 'not-a-version'))
+    expect(await readInstalledVersion(binDir)).toBeUndefined()
+  })
+
+  it('reports the newest version directory, ignoring non-version entries', async () => {
+    await mkdir(join(binDir, '7.2.5'))
+    await mkdir(join(binDir, '7.10.0'))
+    await mkdir(join(binDir, 'tmp'))
+    expect(await readInstalledVersion(binDir)).toBe('7.10.0')
   })
 })

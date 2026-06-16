@@ -5,11 +5,12 @@ import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { arch as osArch, platform as osPlatform } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import semver from 'semver'
 import { exists } from '../../shared/fs'
 
 const execFileAsync = promisify(execFile)
 
-const REPO = 'router-for-me/CLIProxyAPI'
+export const REPO = 'router-for-me/CLIProxyAPI'
 export const DEFAULT_BINARY_VERSION = '7.2.5'
 
 export interface AssetInfo {
@@ -49,7 +50,7 @@ export function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, '')
 }
 
-async function fetchOk(url: string, signal?: AbortSignal): Promise<Response> {
+export async function fetchOk(url: string, signal?: AbortSignal): Promise<Response> {
   const response = await fetch(url, {
     headers: { 'User-Agent': 'universal-chat-provider-vscode' },
     ...(signal ? { signal } : {}),
@@ -125,6 +126,22 @@ export async function acquireBinary(options: AcquireOptions): Promise<AcquireRes
   options.output.appendLine(`Installed CLIProxyAPI ${version} at ${binaryPath}.`)
   await pruneOldVersions(options.binDir, version, options.output)
   return { binaryPath, version }
+}
+
+/**
+ * Version of the binary on disk — the single dir pruning keeps in `binDir` —
+ * letting a window that adopted the shared server still report what is running.
+ */
+export async function readInstalledVersion(binDir: string): Promise<string | undefined> {
+  let entries: string[]
+  try {
+    entries = await readdir(binDir)
+  }
+  catch {
+    return undefined
+  }
+  const [newest] = semver.rsort(entries.filter(entry => semver.valid(entry) !== null))
+  return newest
 }
 
 async function pruneOldVersions(binDir: string, keep: string, output: OutputChannel): Promise<void> {

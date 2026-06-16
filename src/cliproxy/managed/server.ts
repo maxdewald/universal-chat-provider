@@ -7,7 +7,7 @@ import { mkdir } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import process from 'node:process'
 import { delay } from '../../shared/async'
-import { acquireBinary } from './binary'
+import { acquireBinary, readInstalledVersion } from './binary'
 import { DEFAULT_PORT, setConfigPort } from './config'
 import { readServerPid, writeServerPid } from './leases'
 
@@ -133,8 +133,9 @@ export class ManagedServer {
       if (this.deps.verifyOwnership === undefined || await this.deps.verifyOwnership(preferredBase)) {
         this.adopted = true
         this.port = preferred
+        this.version = await readInstalledVersion(this.deps.paths.binDir)
         this.deps.output.appendLine(`Adopted a healthy CLIProxyAPI server on port ${preferred}.`)
-        return { baseUrl: preferredBase, port: preferred }
+        return { baseUrl: preferredBase, port: preferred, ...(this.version !== undefined ? { version: this.version } : {}) }
       }
       this.deps.output.appendLine(`Port ${preferred} is held by another CLIProxyAPI; starting a separate managed server.`)
     }

@@ -20,10 +20,14 @@ import { MGMT_KEY_SECRET, PORT_STATE_KEY, provisionManagedState, watchAuthDir } 
 import { DEFAULT_HOST, DEFAULT_PORT } from './managed/config'
 import { releaseLease } from './managed/leases'
 import { LogTailer } from './managed/log-tailer'
+import { listReleaseVersions, pickSuggestedUpdate } from './managed/updates'
 import { ManagementClient } from './management-client'
 import { buildStatusSnapshot } from './status'
 
 export type { ServerMode, ServerStatus, ServerStatusSnapshot } from './status'
+
+/** globalState key holding the one version the user chose to skip suggesting. */
+const DISMISSED_UPDATE_KEY = 'universalChatProvider.dismissedUpdateVersion'
 
 export class ServerController implements ProxyConnection {
   private readonly disposables: Disposable[] = []
@@ -37,6 +41,7 @@ export class ServerController implements ProxyConnection {
   private refreshListener: (() => void) | undefined
   private statusListener: ((status: ServerStatus) => void) | undefined
   private lastStatus: ServerStatus = 'starting'
+  private updateCheckStarted = false
 
   constructor(
     private readonly context: ExtensionContext,
@@ -88,6 +93,7 @@ export class ServerController implements ProxyConnection {
       await this.server!.ensureRunning()
       this.setStatus('running')
       void this.accounts.maybePromptLogin()
+      void this.maybeSuggestUpdate()
     }
     catch (error) {
       this.setStatus('error')
@@ -116,12 +122,17 @@ export class ServerController implements ProxyConnection {
       void window.showInformationMessage('Binary updates apply only to the managed server.')
       return
     }
+    await this.applyBinaryUpdate(this.requestedVersion())
+  }
+
+  /** Acquire `version`, restart the managed server, and surface the outcome. */
+  private async applyBinaryUpdate(version: string): Promise<void> {
     try {
       await this.bootstrap()
       await window.withProgress(
         { location: ProgressLocation.Notification, title: 'Updating CLIProxyAPI…' },
         async () => {
-          await acquireBinary({ binDir: this.paths!.binDir, requestedVersion: this.requestedVersion(), output: this.output })
+          await acquireBinary({ binDir: this.paths!.binDir, requestedVersion: version, output: this.output })
           await this.server!.restart()
         },
       )
@@ -131,6 +142,53 @@ export class ServerController implements ProxyConnection {
     }
     catch (error) {
       void window.showErrorMessage(`Could not update CLIProxyAPI: ${errorMessage(error)}`)
+    }
+  }
+
+  /**
+   * Best-effort, once per window: when a newer release within the running
+   * binary's major version exists, offer to install it. Never throws.
+   */
+  private async maybeSuggestUpdate(): Promise<void> {
+    if (this.updateCheckStarted)
+      return
+    const config = workspace.getConfiguration('universalChatProvider')
+    if (this.mode() === 'external' || !config.get<boolean>('server.suggestUpdates', true))
+      return
+    const requested = this.requestedVersion()
+    if (requested.toLowerCase() === 'latest')
+      return
+    const installed = this.server?.installedVersion()
+    if (installed === undefined)
+      return
+    // Claim the once-per-window slot before the first await so concurrent
+    // ensureReady calls cannot double-fire the prompt.
+    this.updateCheckStarted = true
+
+    let target: string | null
+    try {
+      target = pickSuggestedUpdate(installed, await listReleaseVersions())
+    }
+    catch (error) {
+      this.output.appendLine(`CLIProxyAPI update check failed: ${errorMessage(error)}`)
+      return
+    }
+    if (target === null || target === this.context.globalState.get<string>(DISMISSED_UPDATE_KEY))
+      return
+
+    const update = 'Update'
+    const skip = 'Skip This Version'
+    const choice = await window.showInformationMessage(
+      `CLIProxyAPI ${target} is available (you're on ${installed}).`,
+      update,
+      skip,
+    )
+    if (choice === update) {
+      await config.update('server.version', target, ConfigurationTarget.Global)
+      await this.applyBinaryUpdate(target)
+    }
+    else if (choice === skip) {
+      await this.context.globalState.update(DISMISSED_UPDATE_KEY, target)
     }
   }
 

@@ -143,6 +143,11 @@
           "default": "7.2.5",
           "description": "CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases."
         },
+        "universalChatProvider.server.suggestUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "When a pinned managed server has a newer release within the same major version, offer to update to it. New major versions are never suggested automatically. No effect with 'latest' or in external mode."
+        },
         "universalChatProvider.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8317",
@@ -207,6 +212,7 @@
   "dependencies": {
     "eventsource-parser": "^3.1.0",
     "moderndash": "^4.0.2",
+    "semver": "^7.8.4",
     "tokenx": "^1.3.0",
     "untildify": "^6.0.0",
     "yaml": "^2.9.0"
@@ -214,6 +220,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "^9.0.0",
     "@types/node": "^24.13.2",
+    "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "^4.1.8",
     "@vscode/dts": "^0.4.1",
     "@vscode/vsce": "^3.9.2",
