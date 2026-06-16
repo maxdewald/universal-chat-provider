@@ -118,28 +118,6 @@ describe('cLIProxyClient', () => {
     expect(handlers.onUsage).toHaveBeenCalledWith({ output_tokens: 2 })
   })
 
-  it('counts input tokens via the count_tokens endpoint and rejects non-numeric replies', async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(Response.json({ input_tokens: 1234 }))
-      .mockResolvedValueOnce(Response.json({ error: 'unknown model' }, { status: 404 }))
-      .mockResolvedValueOnce(Response.json({ note: 'no count' }))
-    vi.stubGlobal('fetch', fetchMock)
-    const { CLIProxyClient } = await import('../../src/cliproxy/client')
-    const client = new CLIProxyClient('http://proxy', 'key')
-    const signal = new AbortController().signal
-
-    await expect(client.countInputTokens({ model: 'm', messages: [] }, signal)).resolves.toBe(1234)
-    expect(fetchMock).toHaveBeenNthCalledWith(1, 'http://proxy/v1/messages/count_tokens', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer key', 'Content-Type': 'application/json' },
-      body: '{"model":"m","messages":[]}',
-      signal,
-    })
-
-    await expect(client.countInputTokens({ model: 'm' })).rejects.toMatchObject({ status: 404 })
-    await expect(client.countInputTokens({ model: 'm' })).rejects.toThrow('input_tokens')
-  })
-
   it('forwards prompt cache keys as CLIProxyAPI session hints', async () => {
     const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValue(new Response(event({ type: 'response.completed' })))

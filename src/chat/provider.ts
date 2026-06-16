@@ -24,15 +24,14 @@ import { asString } from '../shared/json'
 import { CacheMetricsTracker } from './cache-metrics'
 import { streamCompletion } from './completion'
 import { CredentialFlows } from './credential-flows'
+import { estimateTokens } from './estimate'
 import { ModelRegistry } from './model-registry'
 import { buildRequest, buildTextRequest } from './request'
-import { TokenCounter } from './token-counter'
 
 export class UniversalChatProvider implements LanguageModelChatProvider<ProviderModel> {
   private readonly credentials: CredentialStore
   private readonly registry: ModelRegistry
   private readonly credentialFlows: CredentialFlows
-  private readonly tokenCounter: TokenCounter
   private readonly cacheMetrics: CacheMetricsTracker
 
   constructor(
@@ -47,7 +46,6 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
       onCredentialsAccepted: () => this.credentialFlows.markCredentialsAccepted(),
     })
     this.credentialFlows = new CredentialFlows(this.credentials, this.registry, output)
-    this.tokenCounter = new TokenCounter({ connection, credentials: this.credentials, output })
     this.cacheMetrics = new CacheMetricsTracker(context, output)
   }
 
@@ -106,11 +104,13 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
   }
 
   async provideTokenCount(
-    model: ProviderModel,
+    _model: ProviderModel,
     value: string | LanguageModelChatRequestMessage,
     token: CancellationToken,
   ): Promise<number> {
-    return this.tokenCounter.count(model, value, token)
+    if (token.isCancellationRequested)
+      return 0
+    return estimateTokens(value)
   }
 
   async getModels(interactive: boolean, token?: CancellationToken): Promise<readonly ProviderModel[]> {

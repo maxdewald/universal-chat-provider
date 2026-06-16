@@ -85,64 +85,6 @@ export function buildTextRequest(
   }
 }
 
-/**
- * Build an Anthropic `count_tokens` request for a single string or message.
- * The proxy translates this shape into the target provider's format before
- * counting, so we only need a faithful representation of the content: text and
- * images map to native blocks; tool calls/results are flattened to text (they
- * cannot stand alone as a valid `tool_use`/`tool_result` pair in isolation).
- * The role is always `user` so a lone assistant message never trips message
- * validation — role framing is a negligible, fixed part of the count.
- */
-export function buildCountPayload(
-  model: ProviderModel,
-  value: string | LanguageModelChatRequestMessage,
-): Record<string, unknown> {
-  const content = typeof value === 'string'
-    ? [{ type: 'text', text: value }]
-    : countContent(value)
-  return {
-    model: model.proxyModelId,
-    messages: [{ role: 'user', content }],
-  }
-}
-
-export function fingerprintCountValue(value: string | LanguageModelChatRequestMessage): string {
-  if (typeof value === 'string')
-    return `string:${value}`
-  return messageFingerprint(value) ?? `empty:${value.role}`
-}
-
-function countContent(message: LanguageModelChatRequestMessage): Record<string, unknown>[] {
-  const blocks: Record<string, unknown>[] = []
-  for (const part of message.content) {
-    if (part instanceof LanguageModelTextPart) {
-      if (part.value.length > 0)
-        blocks.push({ type: 'text', text: part.value })
-    }
-    else if (part instanceof LanguageModelDataPart) {
-      if (part.mimeType.startsWith('image/')) {
-        blocks.push({
-          type: 'image',
-          source: { type: 'base64', media_type: part.mimeType, data: Buffer.from(part.data).toString('base64') },
-        })
-      }
-      else {
-        blocks.push({ type: 'text', text: new TextDecoder().decode(part.data) })
-      }
-    }
-    else if (part instanceof LanguageModelToolCallPart) {
-      blocks.push({ type: 'text', text: `${part.name}(${JSON.stringify(part.input)})` })
-    }
-    else if (part instanceof LanguageModelToolResultPart) {
-      blocks.push({ type: 'text', text: serializeToolResult(part) })
-    }
-  }
-  if (blocks.length === 0)
-    blocks.push({ type: 'text', text: '' })
-  return blocks
-}
-
 export function convertMessage(message: LanguageModelChatRequestMessage): Record<string, unknown>[] {
   const role = message.role === LanguageModelChatMessageRole.Assistant ? 'assistant' : 'user'
   const content: Record<string, unknown>[] = []

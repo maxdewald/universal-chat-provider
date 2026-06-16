@@ -20,14 +20,12 @@ import { resetVSCodeMock, vscodeMock, window } from '../support/vscode'
 const clientMocks = vi.hoisted(() => ({
   discover: vi.fn(),
   streamResponse: vi.fn(),
-  countInputTokens: vi.fn(),
 }))
 
 vi.mock('../../src/cliproxy/client', () => ({
   CLIProxyClient: class {
     discover = clientMocks.discover
     streamResponse = clientMocks.streamResponse
-    countInputTokens = clientMocks.countInputTokens
   },
 }))
 
@@ -39,8 +37,6 @@ beforeEach(() => {
   resetVSCodeMock()
   clientMocks.discover.mockReset()
   clientMocks.streamResponse.mockReset()
-  clientMocks.countInputTokens.mockReset()
-  clientMocks.countInputTokens.mockResolvedValue(7)
   vscodeMock.settings.set('universalChatProvider.autoDetectConfig', false)
   vscodeMock.settings.set('universalChatProvider.baseUrl', 'http://proxy/')
 })
@@ -254,21 +250,12 @@ describe('language model provider', () => {
     expect(vscodeMock.settings.get('universalChatProvider.baseUrl')).toBe('http://new-proxy')
     expect(clientMocks.discover).toHaveBeenCalledTimes(1)
 
-    // The estimate answers instantly; the exact proxy count lands in the background.
+    // Token counts are a purely local `tokenx` estimate; the proxy is never queried.
     await expect(provider.provideTokenCount(
       model(),
       'hello',
       new CancellationTokenSource().token,
     )).resolves.toBe(estimateTokens('hello'))
-    await vi.waitFor(async () => expect(await provider.provideTokenCount(
-      model(),
-      'hello',
-      new CancellationTokenSource().token,
-    )).toBe(7))
-    expect(clientMocks.countInputTokens).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'model-a' }),
-      expect.any(AbortSignal),
-    )
   })
 
   it('finishes an interactive refresh when configuration occurs during onboarding', async () => {

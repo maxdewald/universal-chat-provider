@@ -139,29 +139,6 @@ export class CLIProxyClient {
     }
   }
 
-  /**
-   * Ask the proxy for the exact input-token count of a request. The proxy
-   * routes by model id and counts with that provider's own tokenizer (a
-   * server-side GPT tokenizer for OpenAI/Codex, the native count endpoint for
-   * Claude/Gemini/etc.), so the result is authoritative rather than estimated.
-   * The payload is the Anthropic `count_tokens` shape; the response carries
-   * `input_tokens` regardless of the upstream provider.
-   */
-  async countInputTokens(payload: Record<string, unknown>, signal?: AbortSignal): Promise<number> {
-    const response = await fetch(`${this.baseUrl}/v1/messages/count_tokens`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify(payload),
-      ...(signal ? { signal } : {}),
-    })
-    if (!response.ok)
-      throw await responseError(response)
-    const count = asRecord(await response.json())?.input_tokens
-    if (typeof count !== 'number' || !Number.isFinite(count))
-      throw new Error('CLIProxyAPI count_tokens response had no numeric input_tokens.')
-    return count
-  }
-
   private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       headers: this.headers(),

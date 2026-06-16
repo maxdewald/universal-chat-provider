@@ -8,7 +8,7 @@ import {
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
 } from 'vscode'
-import { buildCountPayload, buildPromptCacheKey, buildRequest, buildTextRequest, convertMessage, fingerprintCountValue } from '../../src/chat/request'
+import { buildPromptCacheKey, buildRequest, buildTextRequest, convertMessage } from '../../src/chat/request'
 
 const model = {
   proxyModelId: 'proxy-model',
@@ -170,52 +170,6 @@ describe('response request conversion', () => {
       }],
       tool_choice: 'auto',
     })
-  })
-
-  it('builds an anthropic count_tokens payload from a string', () => {
-    expect(buildCountPayload(model, 'how many tokens?')).toEqual({
-      model: 'proxy-model',
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'how many tokens?' }] }],
-    })
-  })
-
-  it('flattens a message into countable blocks, mapping images and tool parts', () => {
-    const payload = buildCountPayload(model, {
-      role: LanguageModelChatMessageRole.Assistant,
-      content: [
-        new LanguageModelTextPart('reply'),
-        new LanguageModelDataPart(new Uint8Array([1, 2]), 'image/png'),
-        LanguageModelDataPart.text('notes'),
-        new LanguageModelToolCallPart('call-1', 'lookup', { q: 'x' }),
-        new LanguageModelToolResultPart('call-1', [new LanguageModelTextPart('done')]),
-      ],
-      name: undefined,
-    })
-
-    expect(payload).toEqual({
-      model: 'proxy-model',
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: 'reply' },
-          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AQI=' } },
-          { type: 'text', text: 'notes' },
-          { type: 'text', text: 'lookup({"q":"x"})' },
-          { type: 'text', text: 'done' },
-        ],
-      }],
-    })
-  })
-
-  it('fingerprints values so identical content shares a cache key', () => {
-    const message = {
-      role: LanguageModelChatMessageRole.User,
-      content: [new LanguageModelTextPart('hello')],
-      name: undefined,
-    }
-    expect(fingerprintCountValue('hello')).toBe('string:hello')
-    expect(fingerprintCountValue(message)).toBe(fingerprintCountValue({ ...message }))
-    expect(fingerprintCountValue(message)).not.toBe(fingerprintCountValue('hello'))
   })
 
   it('builds a bounded plain-text request for internal features', () => {
