@@ -37,9 +37,8 @@
 
 - **Native model picker** — your subscription models appear under *Universal Chat Provider* in Copilot Chat, with context, output, tool, image, and reasoning metadata.
 - **Native Thinking Effort** — models with multiple reasoning levels use VS Code's built-in selector instead of duplicated entries.
-- **Commit messages** — generate a message from staged changes via the ✨ action in the Source Control input. No Copilot subscription required.
+- **Utility model** — point Copilot's commit messages, chat titles, and summaries at your subscription models with one command. No Copilot subscription required.
 - **Zero setup (managed mode)** — the extension downloads, verifies, and supervises the proxy for you; one shared server across all windows.
-- **Accurate token counts** — every request is counted through the upstream provider's own tokenizer, never a local guess.
 
 ## Supported logins
 
@@ -80,11 +79,9 @@ The API key is stored in VS Code `SecretStorage`. In external mode the extension
 > [!WARNING]
 > **Use entirely at your own risk and discretion.** This extension routes chat through your personal AI **subscription** accounts (Claude, ChatGPT / Codex, Gemini, …) over OAuth. Accessing these subscriptions outside their official apps may violate the providers' **Terms of Service** and could result in rate limiting or account suspension. You alone are responsible for how you use it.
 
-## Commit messages
+## Utility model
 
-Click the ✨ action in the Source Control input to draft a [Conventional Commits](https://www.conventionalcommits.org) subject from your staged changes (falling back to working-tree changes when nothing is staged). The message lands in the input box for review — it is **never committed automatically**.
-
-Commit-model selection is independent from Chat (*Select Commit Message Model*). Set `universalChatProvider.commitMessage.instructions` to customize the style, e.g. to opt into a body.
+Copilot generates commit messages, chat titles, and summaries with its own background models. Run *Universal Chat Provider: Set Utility Model* (or use the status bar menu) to point Copilot's `chat.utilityModel` and `chat.utilitySmallModel` at one of your subscription models instead, so those background flows run through your accounts. No Copilot subscription required. Clear the selection to undo.
 
 ## How it works
 
@@ -96,7 +93,7 @@ GitHub Copilot Chat normally only talks to Copilot's own models. This extension 
   │ Claude             │     │              │     │  Copilot Chat     │
   │ ChatGPT / Codex    │──┐  │              │  ┌─▶│   model picker    │
   │ Gemini             │  ├─▶│  CLIProxyAPI │──┤  ├──────────────────┤
-  │ Grok · Kimi · …    │──┘  │   (OAuth)    │  └─▶│  Commit messages  │
+  │ Grok · Kimi · …    │──┘  │   (OAuth)    │  └─▶│  Utility model    │
   └────────────────────┘     └──────────────┘     └──────────────────┘
 ```
 
@@ -107,7 +104,7 @@ GitHub Copilot Chat normally only talks to Copilot's own models. This extension 
 
 The provider reads CLIProxyAPI's standard and enhanced model-list endpoints and streams text, thinking summaries, tool calls, and usage. Requests carry a stable `prompt_cache_key` (also sent as `Session_id`) so Codex prompt-cache reuse, reasoning replay, and optional `session-affinity` selection stay sticky.
 
-VS Code requires custom providers to implement `provideTokenCount`. Rather than guessing locally, every request is counted through CLIProxyAPI's `count_tokens` endpoint, which routes by model and uses the upstream provider's own tokenizer. Counts are cached by content, and a count that can't be obtained contributes nothing rather than a guess.
+VS Code requires custom providers to implement `provideTokenCount`. This is served by a fast local heuristic (`tokenx`, no tokenizer vocab and no network round-trip), since the count only steers VS Code's context-window compression — the real accounting comes from the upstream provider's `usage` numbers in each streamed response.
 
 </details>
 
