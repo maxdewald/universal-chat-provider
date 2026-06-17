@@ -209,29 +209,30 @@ describe('model mapping', () => {
     })
   })
 
-  it('capitalizes provider names in model details and tooltips', () => {
+  it('shows the CLI app in model details and tooltips', () => {
     const models = mapProxyModels(
       [
         { id: 'gpt', owned_by: 'openai', context_length: 128_000 },
         { id: 'gemini', owned_by: 'antigravity', context_length: 128_000 },
+        { id: 'sonnet', owned_by: 'anthropic', context_length: 128_000 },
+        { id: 'flash', owned_by: 'google', context_length: 128_000 },
+        { id: 'mystery', owned_by: 'acme-labs', context_length: 128_000 },
       ],
       [],
       new Map(),
       { defaultMaxOutputTokens: 8192 },
     )
 
-    expect(models).toMatchObject([
-      {
-        id: 'gemini',
-        detail: '128K context · Antigravity',
-      },
-      {
-        id: 'gpt',
-        detail: '128K context · OpenAI',
-      },
-    ])
-    expect(models[0]?.tooltip).toContain('Antigravity via CLIProxyAPI')
-    expect(models[1]?.tooltip).toContain('OpenAI via CLIProxyAPI')
+    const detail = Object.fromEntries(models.map(model => [model.id, model.detail]))
+    expect(detail).toMatchObject({
+      gpt: '128K context · Codex',
+      gemini: '128K context · Antigravity',
+      sonnet: '128K context · Claude Code',
+      flash: '128K context · Gemini',
+      // Unknown providers fall back to title-casing.
+      mystery: '128K context · Acme-labs',
+    })
+    expect(models.find(model => model.id === 'gpt')?.tooltip).toContain('Codex via CLIProxyAPI')
   })
 
   it('leads the tooltip with the model description and a compact spec line', () => {

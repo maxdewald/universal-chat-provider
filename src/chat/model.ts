@@ -281,15 +281,20 @@ function formatLevel(value: string): string {
     : capitalize(value)
 }
 
+// The proxy reports the company in `owned_by` (e.g. "anthropic", "google"); show
+// the CLI app instead. Only values that need renaming are listed — the rest
+// (e.g. "kimi" → "Kimi") title-case correctly on their own.
 function formatProviderName(value: string): string {
-  const knownProviderNames: Record<string, string> = {
-    openai: 'OpenAI',
+  const apps: Record<string, string> = {
+    anthropic: 'Claude Code',
+    openai: 'Codex',
+    google: 'Gemini',
+    antigravity: 'Antigravity',
+    xai: 'Grok',
   }
   const normalized = value.trim()
-  const known = knownProviderNames[normalized.toLowerCase()]
-  if (known !== undefined)
-    return known
-  return normalized.replace(/[a-z][\w'-]*/gi, word => capitalize(word))
+  return apps[normalized.toLowerCase()]
+    ?? normalized.replace(/[a-z][\w'-]*/gi, word => capitalize(word))
 }
 
 function normalizeReasoningModelName(name: string, levels: readonly string[]): string {
