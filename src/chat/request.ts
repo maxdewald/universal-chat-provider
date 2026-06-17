@@ -97,12 +97,21 @@ export function buildTextRequest(
   }
 }
 
+// ponytail: drop Copilot's cache_control breakpoint marker. Cliproxy sets the real
+// breakpoints itself and /v1/responses has no field for it, so forwarding it as text
+// only breaks the cache prefix — it's on the live turn, gone once that turn is history.
+function isCacheControlPart(part: unknown): boolean {
+  return part instanceof LanguageModelDataPart && part.mimeType === 'cache_control'
+}
+
 export function convertMessage(message: LanguageModelChatRequestMessage): Record<string, unknown>[] {
   const role = message.role === LanguageModelChatMessageRole.Assistant ? 'assistant' : 'user'
   const content: Record<string, unknown>[] = []
   const items: Record<string, unknown>[] = []
 
   for (const part of message.content) {
+    if (isCacheControlPart(part))
+      continue
     if (part instanceof LanguageModelTextPart) {
       content.push({
         type: role === 'assistant' ? 'output_text' : 'input_text',
@@ -146,7 +155,7 @@ export function convertMessage(message: LanguageModelChatRequestMessage): Record
 }
 
 export function serializeToolResult(part: LanguageModelToolResultPart): string {
-  return part.content.map((value) => {
+  return part.content.filter(value => !isCacheControlPart(value)).map((value) => {
     if (value instanceof LanguageModelTextPart)
       return value.value
     if (value instanceof LanguageModelDataPart) {
@@ -184,6 +193,8 @@ function messageFingerprint(message: LanguageModelChatRequestMessage): string | 
 }
 
 function partFingerprint(part: LanguageModelChatRequestMessage['content'][number]): string | undefined {
+  if (isCacheControlPart(part))
+    return undefined
   if (part instanceof LanguageModelTextPart)
     return `text:${part.value}`
   if (part instanceof LanguageModelDataPart) {

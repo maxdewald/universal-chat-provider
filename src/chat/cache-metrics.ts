@@ -1,14 +1,17 @@
 import type { ExtensionContext, OutputChannel, StatusBarItem } from 'vscode'
+import { createHash } from 'node:crypto'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { StatusBarAlignment, window, workspace } from 'vscode'
 import { errorMessage } from '../shared/errors'
-import { asRecord } from '../shared/json'
+import { asRecord, asString } from '../shared/json'
 
-/** Opt-in: persist per-request cache metrics and show the live status bar. */
-const ENABLED_SETTING = 'cacheMetrics.enabled'
-/** Append-only metrics log, kept in the extension's global storage. */
-const LOG_FILE = 'cache-metrics.jsonl'
+/** Opt-in debug mode: persist per-request diagnostics and show the live status bar. */
+const ENABLED_SETTING = 'debug'
+/** Append-only debug log, kept in the extension's global storage. */
+const LOG_FILE = 'debug.jsonl'
+/** Cap each diverging item's logged content so one giant turn can't bloat the file. */
+const DIVERGED_CONTENT_CAP = 4000
 
 export type UsageShape = 'anthropic' | 'openai' | 'unknown'
 
@@ -31,6 +34,71 @@ export interface UsageContext {
   /** The `Session_id` we asked the proxy to key Claude's cache on. */
   promptCacheKey?: string | undefined
   requestInitiator?: string | undefined
+  /** The request `input` items, so consecutive turns can be diffed for prefix stability. */
+  inputItems?: readonly unknown[] | undefined
+}
+
+/**
+ * Per-message fingerprint of the request prefix: `tag:chars:hash` for each
+ * input item, in order. Two turns share a cached prefix only up to the first
+ * index where these diverge — so diffing consecutive log lines pinpoints what
+ * (e.g. a volatile system prompt injected by the chat client) breaks the cache.
+ */
+function fingerprintInput(items: readonly unknown[] | undefined): string[] | undefined {
+  return items?.map((item) => {
+    const json = JSON.stringify(item) ?? ''
+    const record = asRecord(item)
+    const tag = asString(record?.role) ?? asString(record?.type) ?? 'item'
+    const hash = createHash('sha256').update(json).digest('hex').slice(0, 8)
+    return `${tag}:${json.length}:${hash}`
+  })
+}
+
+export interface CrossTurnDiff {
+  /** Number of leading items identical to the previous request — the cacheable prefix. */
+  stablePrefixLen: number
+  totalItems: number
+  /** Same-index items that changed since the previous request, with capped content. */
+  diverged: { index: number, before: string, after: string }[]
+}
+
+/**
+ * Compare this request's items to the previous request's, in order. Everything
+ * up to {@link CrossTurnDiff.stablePrefixLen} is byte-identical (so the proxy
+ * can serve it from cache); the `diverged` list is the first thing that broke
+ * the prefix and what replaced it — the signal for why a turn cached poorly.
+ */
+function crossTurnDiff(
+  prev: readonly unknown[] | undefined,
+  cur: readonly unknown[] | undefined,
+): CrossTurnDiff | undefined {
+  if (prev === undefined || cur === undefined)
+    return undefined
+  const json = (items: readonly unknown[], i: number): string => JSON.stringify(items[i]) ?? ''
+  let stable = 0
+  while (stable < prev.length && stable < cur.length && json(prev, stable) === json(cur, stable))
+    stable++
+  const cap = (text: string): string =>
+    text.length > DIVERGED_CONTENT_CAP ? `${text.slice(0, DIVERGED_CONTENT_CAP)}…(+${text.length - DIVERGED_CONTENT_CAP})` : text
+  const diverged: CrossTurnDiff['diverged'] = []
+  for (let i = stable; i < Math.min(prev.length, cur.length); i++) {
+    const before = json(prev, i)
+    const after = json(cur, i)
+    if (before !== after)
+      diverged.push({ index: i, before: cap(before), after: cap(after) })
+  }
+  return { stablePrefixLen: stable, totalItems: cur.length, diverged }
+}
+
+/** One-line live summary of how the request prefix moved since the last turn. */
+function formatPrefixLine(model: string, diff: CrossTurnDiff): string {
+  const base = `[prefix] ${model}: ${diff.stablePrefixLen}/${diff.totalItems} items stable`
+  const first = diff.diverged[0]
+  if (first === undefined)
+    return `${base} (append-only)`
+  const delta = first.after.length - first.before.length
+  const sign = delta >= 0 ? '+' : ''
+  return `${base}; broke@${first.index} Δ${sign}${delta} (${first.before.length}→${first.after.length} chars)`
 }
 
 function num(value: unknown): number {
@@ -138,6 +206,8 @@ export class CacheMetricsTracker {
   private readonly totals = { read: 0, write: 0, uncached: 0, output: 0, requests: 0 }
   /** Serializes appends so concurrent completions can't interleave a line. */
   private writes: Promise<void> = Promise.resolve()
+  /** Previous chat request's items, for the cross-turn prefix diff. */
+  private lastItems: readonly unknown[] | undefined
 
   constructor(
     private readonly context: ExtensionContext,
@@ -158,9 +228,14 @@ export class CacheMetricsTracker {
       this.statusBar.hide()
       return
     }
+    const diff = crossTurnDiff(this.lastItems, context.inputItems)
+    if (context.inputItems !== undefined)
+      this.lastItems = context.inputItems
+    if (diff !== undefined)
+      this.output.appendLine(formatPrefixLine(context.model, diff))
     this.accumulate(summary)
     this.updateStatusBar()
-    this.append(summary, context, usage)
+    this.append(summary, context, usage, diff)
   }
 
   dispose(): void {
@@ -195,7 +270,7 @@ export class CacheMetricsTracker {
     this.statusBar.show()
   }
 
-  private append(summary: UsageSummary, context: UsageContext, raw: unknown): void {
+  private append(summary: UsageSummary, context: UsageContext, raw: unknown, diff: CrossTurnDiff | undefined): void {
     const entry = {
       ts: new Date().toISOString(),
       model: context.model,
@@ -209,6 +284,8 @@ export class CacheMetricsTracker {
       uncachedInputTokens: summary.uncachedInputTokens,
       outputTokens: summary.outputTokens,
       hitRate: summary.hitRate ?? null,
+      inputPrefix: fingerprintInput(context.inputItems) ?? null,
+      crossTurn: diff ?? null,
       raw: raw ?? null,
     }
     const directory = this.context.globalStorageUri.fsPath

@@ -155,10 +155,10 @@
           "minimum": 1024,
           "description": "Fallback output-token limit when CLIProxyAPI provides no model-specific value."
         },
-        "universalChatProvider.cacheMetrics.enabled": {
+        "universalChatProvider.debug": {
           "type": "boolean",
           "default": false,
-          "description": "Record per-request prompt-cache metrics (cache-read vs cache-write vs uncached input tokens, with a hit rate) to a JSONL file in the extension's global storage, and show the running cache-hit rate in the status bar. Off by default; use it to diagnose why running sessions burn through rate limits."
+          "description": "Debug mode: show the live prompt-cache hit rate in the status bar and write per-request diagnostics to debug.jsonl in the extension's global storage — token usage (cache-read vs cache-write vs uncached, with a hit rate), the request message-prefix fingerprints, and the cross-turn prefix diff (what changed since the previous turn, the thing that breaks the cache). Off by default; use it to diagnose caching and rate-limit issues."
         }
       }
     }

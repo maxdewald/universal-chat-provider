@@ -133,11 +133,11 @@ describe('cacheMetricsTracker', () => {
     )
     expect(statusBarItem.show).not.toHaveBeenCalled()
     expect(statusBarItem.hide).toHaveBeenCalled()
-    await expect(readFile(join(directory, 'cache-metrics.jsonl'), 'utf8')).rejects.toThrow()
+    await expect(readFile(join(directory, 'debug.jsonl'), 'utf8')).rejects.toThrow()
   })
 
   it('records a JSONL line and a status-bar hit rate when enabled', async () => {
-    vscodeMock.settings.set('universalChatProvider.cacheMetrics.enabled', true)
+    vscodeMock.settings.set('universalChatProvider.debug', true)
     const metrics = tracker()
     metrics.record(
       { input_tokens: 300, cache_read_input_tokens: 700, cache_creation_input_tokens: 0, output_tokens: 50 },
@@ -148,7 +148,7 @@ describe('cacheMetricsTracker', () => {
     expect(statusBarItem.show).toHaveBeenCalled()
     expect(statusBarItem.text).toBe('$(database) 70% cached')
 
-    const lines = (await readFile(join(directory, 'cache-metrics.jsonl'), 'utf8')).trim().split('\n')
+    const lines = (await readFile(join(directory, 'debug.jsonl'), 'utf8')).trim().split('\n')
     expect(lines).toHaveLength(1)
     expect(JSON.parse(lines[0]!)).toMatchObject({
       model: 'claude-opus',
@@ -159,5 +159,37 @@ describe('cacheMetricsTracker', () => {
       cacheReadTokens: 700,
       hitRate: 0.7,
     })
+  })
+
+  it('fingerprints the request prefix so a stable lead and a divergent tail are distinguishable', async () => {
+    vscodeMock.settings.set('universalChatProvider.debug', true)
+    const metrics = tracker()
+    const system = { role: 'system', content: 'you are a helper' }
+    metrics.record({ input_tokens: 1, prompt_tokens_details: { cached_tokens: 0 } }, {
+      model: 'm',
+      inputItems: [system, { role: 'user', content: 'first' }],
+    })
+    metrics.record({ input_tokens: 1, prompt_tokens_details: { cached_tokens: 0 } }, {
+      model: 'm',
+      inputItems: [system, { role: 'user', content: 'second' }],
+    })
+    await metrics.flush()
+
+    const lines = (await readFile(join(directory, 'debug.jsonl'), 'utf8')).trim().split('\n')
+    interface Entry {
+      inputPrefix: string[]
+      crossTurn: { stablePrefixLen: number, diverged: { index: number, before: string, after: string }[] } | null
+    }
+    const first = JSON.parse(lines[0]!) as Entry
+    const second = JSON.parse(lines[1]!) as Entry
+    expect(first.inputPrefix[0]).toBe(second.inputPrefix[0]) // identical system message → identical fingerprint (cacheable prefix)
+    expect(first.inputPrefix[1]).not.toBe(second.inputPrefix[1]) // different user turn → divergent fingerprint
+
+    // second turn carries the cross-turn diff: prefix stable through the system message, broke at the user turn
+    expect(second.crossTurn!.stablePrefixLen).toBe(1)
+    expect(second.crossTurn!.diverged[0]!.index).toBe(1)
+    expect(second.crossTurn!.diverged[0]!.before).toContain('first')
+    expect(second.crossTurn!.diverged[0]!.after).toContain('second')
+    expect(first.crossTurn).toBeNull() // first turn has no predecessor
   })
 })

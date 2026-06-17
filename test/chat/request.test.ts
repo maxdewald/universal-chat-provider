@@ -70,6 +70,30 @@ describe('response request conversion', () => {
     ])
   })
 
+  it('strips Copilot cache_control marker parts from content and tool results', () => {
+    const messages = [
+      {
+        role: LanguageModelChatMessageRole.User,
+        content: [
+          new LanguageModelTextPart('hi'),
+          new LanguageModelDataPart(new Uint8Array([1]), 'cache_control'),
+          new LanguageModelToolResultPart('call-1', [
+            new LanguageModelTextPart('result'),
+            new LanguageModelDataPart(new Uint8Array([2]), 'cache_control'),
+          ]),
+        ],
+        name: undefined,
+      },
+    ]
+
+    // The marker leaves no "[cache_control data]" text and no trailing newline, so
+    // the same message serializes identically whether or not Copilot tagged it.
+    expect(messages.flatMap(convertMessage)).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: 'hi' }] },
+      { type: 'function_call_output', call_id: 'call-1', output: 'result' },
+    ])
+  })
+
   it('adds supported reasoning and tool options', () => {
     const request = buildRequest(
       model,

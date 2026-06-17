@@ -99,6 +99,7 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
             model: model.proxyModelId,
             promptCacheKey: asString(request.prompt_cache_key),
             requestInitiator: options.requestInitiator,
+            inputItems: request.input as readonly unknown[],
           })
           const part = createContextUsagePart(usage)
           if (part !== undefined)
