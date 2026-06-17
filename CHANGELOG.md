@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/maxdewald/universal-chat-provider/compare/v0.7.1...v0.7.2) (2026-06-17)
+
+
+### Bug Fixes
+
+* drop unused contribSourceControlInputBoxMenu proposed api ([6d8ca95](https://github.com/maxdewald/universal-chat-provider/commit/6d8ca95dd896a066bd28c627d75cc58c822f5a70))
+
 ## [0.7.1](https://github.com/maxdewald/universal-chat-provider/compare/universal-chat-provider-v0.7.0...universal-chat-provider-v0.7.1) (2026-06-17)
 
 
