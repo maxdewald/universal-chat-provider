@@ -20,10 +20,13 @@ export interface ModelRegistryHooks {
  * a change event only when the model set actually changes. Refreshes are
  * deduplicated: concurrent callers share one in-flight discovery.
  */
+const REFRESH_TTL_MS = 15_000
+
 export class ModelRegistry {
   private readonly changeEmitter = new EventEmitter<void>()
   private cachedModels: ProviderModel[] = []
   private cachedFingerprint = ''
+  private lastRefreshAt = 0
   private refreshPromise: Promise<ProviderModel[]> | undefined
 
   readonly onDidChange: Event<void> = this.changeEmitter.event
@@ -46,12 +49,15 @@ export class ModelRegistry {
   reset(): void {
     this.cachedModels = []
     this.cachedFingerprint = ''
+    this.lastRefreshAt = 0
     this.changeEmitter.fire()
   }
 
   async refresh(interactive: boolean, token?: CancellationToken): Promise<ProviderModel[]> {
     if (this.refreshPromise !== undefined)
       return this.refreshPromise
+    if (Date.now() - this.lastRefreshAt < REFRESH_TTL_MS)
+      return this.cachedModels
     this.refreshPromise = this.doRefresh(interactive, token).finally(() => {
       this.refreshPromise = undefined
     })
@@ -61,6 +67,7 @@ export class ModelRegistry {
   async forceRefresh(interactive = true): Promise<ProviderModel[]> {
     if (this.refreshPromise !== undefined)
       await this.refreshPromise
+    this.lastRefreshAt = 0
     return this.refresh(interactive)
   }
 
@@ -92,6 +99,7 @@ export class ModelRegistry {
         this.changeEmitter.fire()
         this.output.appendLine(`Discovered ${models.length} CLIProxyAPI chat models at ${this.connection.baseUrl()}.`)
       }
+      this.lastRefreshAt = Date.now()
       this.hooks.onCredentialsAccepted()
       return this.cachedModels
     }
