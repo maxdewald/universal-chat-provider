@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, normalize, resolve } from 'node:path'
 import { isPlainObject } from 'moderndash'
 import { parse } from 'yaml'
 
@@ -69,5 +69,5 @@ function firstApiKey(value: unknown): string | undefined {
 function resolveConfigPath(value: string, baseDir: string): string {
   // Expand a leading `~` (also `~/` and `~\` on Windows) to the home directory.
   const expanded = value.replace(/^~(?=$|[/\\])/, homedir())
-  return isAbsolute(expanded) ? expanded : resolve(baseDir, expanded)
+  return isAbsolute(expanded) ? normalize(expanded) : resolve(baseDir, expanded)
 }

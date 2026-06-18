@@ -2,7 +2,7 @@ import type { ExtensionContext } from 'vscode'
 import type { LocalProxyConfig } from './local-config'
 import { access } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, normalize, resolve } from 'node:path'
 import { ConfigurationTarget, window, workspace } from 'vscode'
 import { errorMessage } from '../shared/errors'
 import { readLocalProxyConfig } from './local-config'
@@ -90,7 +90,7 @@ export function configCandidates(): string[] {
   if (configured.length > 0) {
     // Expand a leading `~` (also `~/` and `~\` on Windows) to the home directory.
     const expanded = configured.replace(/^~(?=$|[/\\])/, homedir())
-    return [isAbsolute(expanded) ? expanded : resolve(expanded)]
+    return [isAbsolute(expanded) ? normalize(expanded) : resolve(expanded)]
   }
   return settings.get<boolean>('autoDetectConfig', true)
     ? [
