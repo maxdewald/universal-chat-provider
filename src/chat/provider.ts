@@ -27,7 +27,7 @@ import { createContextUsagePart } from './context-usage'
 import { CredentialFlows } from './credential-flows'
 import { estimateTokens } from './estimate'
 import { ModelRegistry } from './model-registry'
-import { buildRequest, buildTextRequest } from './request'
+import { buildRequest } from './request'
 
 export class UniversalChatProvider implements LanguageModelChatProvider<ProviderModel> {
   private readonly credentials: CredentialStore
@@ -129,32 +129,6 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
 
   async forceRefresh(interactive = true): Promise<ProviderModel[]> {
     return this.registry.forceRefresh(interactive)
-  }
-
-  async completeText(
-    model: ProviderModel,
-    prompt: string,
-    maxOutputTokens: number,
-    token?: CancellationToken,
-  ): Promise<string | undefined> {
-    if (token?.isCancellationRequested)
-      return undefined
-
-    let text = ''
-    await streamCompletion(
-      this.completionDeps(),
-      buildTextRequest(model, prompt, maxOutputTokens),
-      {
-        onText: (delta) => { text += delta },
-        onToolCall: () => {},
-        onUsage: usage => this.cacheMetrics.record(usage, {
-          model: model.proxyModelId,
-          label: 'commit message',
-        }),
-      },
-      token,
-    )
-    return token?.isCancellationRequested ? undefined : text
   }
 
   async configure(): Promise<void> {

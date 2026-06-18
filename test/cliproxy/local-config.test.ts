@@ -1,5 +1,5 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { readLocalProxyConfig } from '../../src/cliproxy/local-config'
@@ -11,11 +11,10 @@ afterEach(async () => {
 })
 
 describe('local CLIProxyAPI config', () => {
-  it('selects the first usable API key and resolves a relative auth directory', async () => {
+  it('selects the first usable API key', async () => {
     const directory = await temporaryDirectory()
     const configPath = join(directory, 'config.yaml')
     await writeFile(configPath, [
-      'auth-dir: auth',
       'api-keys:',
       '  - your-api-key-1',
       '  - " actual-key "',
@@ -25,42 +24,26 @@ describe('local CLIProxyAPI config', () => {
     await expect(readLocalProxyConfig(configPath)).resolves.toEqual({
       path: configPath,
       apiKey: 'actual-key',
-      authDir: join(directory, 'auth'),
     })
   })
 
-  it('expands home paths and omits placeholder keys', async () => {
+  it('omits placeholder keys', async () => {
     const directory = await temporaryDirectory()
     const configPath = join(directory, 'config.yaml')
     await writeFile(configPath, [
-      'auth-dir: ~/.cli-proxy-api',
       'api-keys:',
       '  - your-api-key',
     ].join('\n'))
 
     await expect(readLocalProxyConfig(configPath)).resolves.toEqual({
       path: configPath,
-      authDir: join(homedir(), '.cli-proxy-api'),
     })
   })
 
-  it('uses the default auth directory when auth-dir is empty', async () => {
-    const directory = await temporaryDirectory()
-    const configPath = join(directory, 'config.yaml')
-    await writeFile(configPath, 'auth-dir: "   "\n')
-
-    await expect(readLocalProxyConfig(configPath)).resolves.toEqual({
-      path: configPath,
-      authDir: join(homedir(), '.cli-proxy-api'),
-    })
-  })
-
-  it('reads a plaintext management key and port, ignoring hashed keys', async () => {
+  it('reads a plaintext management key, ignoring hashed keys', async () => {
     const directory = await temporaryDirectory()
     const configPath = join(directory, 'config.yaml')
     await writeFile(configPath, [
-      'port: 9001',
-      'auth-dir: auth',
       'api-keys:',
       '  - actual-key',
       'remote-management:',
@@ -70,9 +53,7 @@ describe('local CLIProxyAPI config', () => {
     await expect(readLocalProxyConfig(configPath)).resolves.toEqual({
       path: configPath,
       apiKey: 'actual-key',
-      authDir: join(directory, 'auth'),
       managementKey: 'super-secret',
-      port: 9001,
     })
   })
 

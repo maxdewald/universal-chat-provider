@@ -78,22 +78,6 @@ export function buildPromptCacheKey(
   return `universal-chat-provider-${hash}`
 }
 
-export function buildTextRequest(
-  model: ProviderModel,
-  prompt: string,
-  maxOutputTokens: number,
-): Record<string, unknown> {
-  return {
-    model: model.proxyModelId,
-    input: [{
-      role: 'user',
-      content: [{ type: 'input_text', text: prompt }],
-    }],
-    stream: true,
-    max_output_tokens: Math.min(model.maxOutputTokens, maxOutputTokens),
-  }
-}
-
 // ponytail: drop Copilot's cache_control breakpoint marker. Cliproxy sets the real
 // breakpoints itself and /v1/responses has no field for it, so forwarding it as text
 // only breaks the cache prefix — it's on the live turn, gone once that turn is history.

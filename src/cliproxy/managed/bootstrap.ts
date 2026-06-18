@@ -1,8 +1,7 @@
 import type { Disposable, ExtensionContext, OutputChannel } from 'vscode'
 import type { ManagedPaths } from './config'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, writeFile } from 'node:fs/promises'
 import { RelativePattern, Uri, workspace } from 'vscode'
-import { exists } from '../../shared/fs'
 import { SECRET_KEY } from '../credentials'
 import {
   buildManagedConfig,
@@ -43,7 +42,7 @@ export async function provisionManagedState(options: ProvisionOptions): Promise<
   const apiKey = await ensureSecret(context, SECRET_KEY)
   const managementKey = await ensureSecret(context, MGMT_KEY_SECRET)
 
-  if (!(await exists(paths.configPath))) {
+  if (!(await access(paths.configPath).then(() => true, () => false))) {
     const port = context.globalState.get<number>(PORT_STATE_KEY) ?? DEFAULT_PORT
     await writeFile(paths.configPath, buildManagedConfig({
       host: DEFAULT_HOST,

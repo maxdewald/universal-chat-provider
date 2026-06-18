@@ -4,7 +4,6 @@ const MODEL_CATALOG_URL = 'https://raw.githubusercontent.com/router-for-me/model
 let catalogCache: Map<string, CatalogModel> | undefined
 
 export interface CatalogThinking {
-  min?: number
   max?: number
   zero_allowed?: boolean
   dynamic_allowed?: boolean

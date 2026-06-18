@@ -12,7 +12,3 @@ export function asRecord(value: unknown): Record<string, unknown> | undefined {
 export function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
-
-export function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every(item => typeof item === 'string')
-}

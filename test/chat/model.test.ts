@@ -35,8 +35,6 @@ describe('model mapping', () => {
         proxyModelId: 'gpt-5.4',
         maxInputTokens: 400_000,
         maxOutputTokens: 128_000,
-        totalContextTokens: 400_000,
-        maximumContextTokens: 1_000_000,
         capabilities: { imageInput: true, toolCalling: true },
       })
       expect(model.reasoningLevels).toEqual([model.reasoningEffort])
@@ -345,8 +343,6 @@ describe('model mapping', () => {
       id: 'tiny',
       maxInputTokens: 128_000,
       maxOutputTokens: 8,
-      totalContextTokens: 128_000,
-      maximumContextTokens: 128_000,
     })
   })
 
@@ -365,7 +361,6 @@ describe('model mapping', () => {
     expect(models).toHaveLength(1)
     expect(models[0]).toMatchObject({
       id: 'sized',
-      totalContextTokens: 256_000,
       maxOutputTokens: 32_000,
       maxInputTokens: 256_000,
     })
@@ -387,8 +382,8 @@ describe('model mapping', () => {
 
     // `maxInputTokens` is a separate dimension from output; carving a reserve out
     // of it only made Copilot compact early, so input always gets the full window.
-    expect(haiku).toMatchObject({ id: 'claude-haiku', totalContextTokens: 200_000, maxInputTokens: 200_000 })
-    expect(over).toMatchObject({ id: 'over-reported', totalContextTokens: 100_000, maxInputTokens: 100_000 })
+    expect(haiku).toMatchObject({ id: 'claude-haiku', maxInputTokens: 200_000 })
+    expect(over).toMatchObject({ id: 'over-reported', maxInputTokens: 100_000 })
   })
 
   it('ignores malformed catalog sections', () => {

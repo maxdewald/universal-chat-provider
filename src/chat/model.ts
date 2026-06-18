@@ -26,8 +26,6 @@ export interface ProxyModelMetadata {
 
 export interface ProviderModel extends LanguageModelChatInformation {
   proxyModelId: string
-  totalContextTokens: number
-  maximumContextTokens: number
   reasoningLevels: readonly string[]
   reasoningEffort?: string
   supportsParallelToolCalls: boolean
@@ -86,7 +84,6 @@ export function mapProxyModels(
       ?? options.defaultMaxOutputTokens,
       options.defaultMaxOutputTokens,
     )
-    const maximumContext = positiveInteger(detail?.max_context_window ?? totalContext, totalContext)
     const levels = resolveReasoning(detail, catalogModel)
     const advertisedName = detail?.display_name ?? catalogModel?.display_name ?? entry.id
     let displayName = normalizeReasoningModelName(advertisedName, levels)
@@ -130,8 +127,6 @@ export function mapProxyModels(
       // Carving an output reserve out of it only made Copilot summarize early.
       maxInputTokens: totalContext,
       maxOutputTokens: outputTokens,
-      totalContextTokens: totalContext,
-      maximumContextTokens: maximumContext,
       supportsParallelToolCalls,
       detail: `${formatTokens(totalContext)} context · ${displayProviderName}`,
       tooltip,

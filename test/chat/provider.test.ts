@@ -46,13 +46,6 @@ describe('language model provider', () => {
     const provider = createProvider()
     const token = new CancellationTokenSource()
 
-    await expect(provider.completeText(
-      model(),
-      'hello',
-      20,
-      token.token,
-    )).rejects.toMatchObject({ code: 'NoPermissions' })
-
     await expect(provider.provideLanguageModelChatResponse(
       model(),
       [],
@@ -111,39 +104,6 @@ describe('language model provider', () => {
     })
     expect(vscodeMock.output.appendLine).toHaveBeenCalledWith(
       '[usage] model-a: input=0 cached=0 write=0 output=3 hit=n/a raw={"output_tokens":3}',
-    )
-  })
-
-  it('completes bounded internal text requests without using the chat selection', async () => {
-    const provider = createProvider('secret')
-    clientMocks.streamResponse.mockImplementation(async (_body: unknown, callbacks: StreamCallbacks) => {
-      callbacks.onText('feat: ')
-      callbacks.onText('add generator')
-      callbacks.onUsage?.({ output_tokens: 4 })
-    })
-
-    await expect(provider.completeText(
-      { ...model(), maxOutputTokens: 1000 },
-      'Generate a commit message.',
-      512,
-      new CancellationTokenSource().token,
-    )).resolves.toBe('feat: add generator')
-
-    expect(clientMocks.streamResponse).toHaveBeenCalledWith(
-      {
-        model: 'model-a',
-        input: [{
-          role: 'user',
-          content: [{ type: 'input_text', text: 'Generate a commit message.' }],
-        }],
-        stream: true,
-        max_output_tokens: 512,
-      },
-      expect.any(Object),
-      expect.any(AbortSignal),
-    )
-    expect(vscodeMock.output.appendLine).toHaveBeenCalledWith(
-      '[usage] model-a (commit message): input=0 cached=0 write=0 output=4 hit=n/a raw={"output_tokens":4}',
     )
   })
 
@@ -348,8 +308,6 @@ function model(): ProviderModel {
     version: '1',
     maxInputTokens: 100,
     maxOutputTokens: 20,
-    totalContextTokens: 120,
-    maximumContextTokens: 120,
     reasoningLevels: ['low', 'high'],
     supportsParallelToolCalls: true,
     capabilities: {

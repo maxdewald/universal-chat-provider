@@ -8,7 +8,7 @@ import {
   LanguageModelToolCallPart,
   LanguageModelToolResultPart,
 } from 'vscode'
-import { buildPromptCacheKey, buildRequest, buildTextRequest, convertMessage } from '../../src/chat/request'
+import { buildPromptCacheKey, buildRequest, convertMessage } from '../../src/chat/request'
 
 const model = {
   proxyModelId: 'proxy-model',
@@ -233,17 +233,5 @@ describe('response request conversion', () => {
       strict: false,
     }])
     expect(request.parallel_tool_calls).toBe(false)
-  })
-
-  it('builds a bounded plain-text request for internal features', () => {
-    expect(buildTextRequest(model, 'Generate a commit message.', 512)).toEqual({
-      model: 'proxy-model',
-      input: [{
-        role: 'user',
-        content: [{ type: 'input_text', text: 'Generate a commit message.' }],
-      }],
-      stream: true,
-      max_output_tokens: 512,
-    })
   })
 })

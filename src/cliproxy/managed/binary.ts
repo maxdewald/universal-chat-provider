@@ -1,13 +1,12 @@
 import type { OutputChannel } from 'vscode'
 import { createHash } from 'node:crypto'
-import { chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { access, chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { arch as osArch, platform as osPlatform } from 'node:os'
 import { dirname, join } from 'node:path'
 import { unzipSync } from 'fflate'
 import { retry } from 'moderndash'
 import { parseTarGzip } from 'nanotar'
 import semver from 'semver'
-import { exists } from '../../shared/fs'
 
 export const REPO = 'router-for-me/CLIProxyAPI'
 export const DEFAULT_BINARY_VERSION = '7.2.5'
@@ -103,7 +102,7 @@ export async function acquireBinary(options: AcquireOptions): Promise<AcquireRes
   const versionDir = join(options.binDir, version)
   const binaryPath = join(versionDir, asset.binaryName)
 
-  if (await exists(binaryPath)) {
+  if (await access(binaryPath).then(() => true, () => false)) {
     options.output.appendLine(`Using cached CLIProxyAPI ${version} at ${binaryPath}.`)
     return { binaryPath, version }
   }
@@ -126,7 +125,7 @@ export async function acquireBinary(options: AcquireOptions): Promise<AcquireRes
   await mkdir(versionDir, { recursive: true })
   await extractArchive(archive, asset.isZip, versionDir)
 
-  if (!(await exists(binaryPath)))
+  if (!(await access(binaryPath).then(() => true, () => false)))
     throw new Error(`Extracted archive did not contain ${asset.binaryName}.`)
   if (osPlatform() !== 'win32')
     await chmod(binaryPath, 0o755)

@@ -2,13 +2,13 @@
 
 A VS Code extension that exposes the chat-capable models from a local
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server in GitHub
-Copilot Chat, and reuses those models to generate Git commit messages.
+Copilot Chat. Those models can also be set as Copilot's utility model, so its
+background flows (commit messages, chat titles, summaries) run through them.
 
 ## Layout
 
 - `src/chat/` — the language-model chat provider: model registry, requests, completion.
 - `src/cliproxy/` — talks to CLIProxyAPI (client, SSE, credentials, and the `managed/` server lifecycle).
-- `src/commit/` — commit-message generation from the SCM input box.
 - `src/extension/` — activation, commands, menus, status bar.
 - `src/shared/` — small cross-cutting helpers.
 
