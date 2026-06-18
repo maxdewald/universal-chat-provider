@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.7.4...v0.8.0) (2026-06-18)
+
+
+### Features
+
+* only use proposed apis and fix marketplace install ([26a14d7](https://github.com/maxdewald/vscode-universal-chat-provider/commit/26a14d73bfc6ad7eee6cb4c6695aa7ea497018e5))
+
 ## [0.7.4](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.7.3...v0.7.4) (2026-06-18)
 
 
