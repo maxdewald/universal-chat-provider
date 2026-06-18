@@ -6,12 +6,14 @@
 
 <p>
   <b>Bring your Claude, ChatGPT&nbsp;/&nbsp;Codex, and Gemini subscriptions into GitHub&nbsp;Copilot&nbsp;Chat</b><br/>
+  <sub>No API key — just OAuth&#8209;login the subscriptions you already pay for.</sub><br/>
   <sub>…and use them to write your Git commit messages, too.</sub>
 </p>
 
 <p>
+  <a href="https://marketplace.visualstudio.com/items?itemName=maxdewald.universal-chat-provider"><img src="https://img.shields.io/visual-studio-marketplace/v/maxdewald.universal-chat-provider?label=Marketplace&logo=visualstudiocode&logoColor=white&color=654FF0" alt="VS Code Marketplace" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=maxdewald.universal-chat-provider"><img src="https://img.shields.io/visual-studio-marketplace/i/maxdewald.universal-chat-provider?label=installs&color=007ACC" alt="Installs" /></a>
   <img src="https://img.shields.io/badge/VS%20Code-%5E1.124-007ACC?logo=visualstudiocode&logoColor=white" alt="VS Code ^1.124" />
-  <img src="https://img.shields.io/badge/Marketplace-coming%20soon-654FF0?logo=visualstudiocode&logoColor=white" alt="Marketplace · coming soon" />
   <img src="https://img.shields.io/badge/license-MIT-3da639" alt="MIT License" />
 </p>
 
@@ -42,20 +44,23 @@
 
 ## Supported logins
 
-| Provider             | Account                |
-| -------------------- | ---------------------- |
-| 🟣 Anthropic Claude  | Claude Code / Pro / Max |
-| 🟢 OpenAI Codex      | ChatGPT Plus / Pro     |
-| 🔵 Google Gemini     | Gemini CLI             |
-| ⚫ Antigravity       | Antigravity            |
-| 🟡 Kimi              | Moonshot Kimi          |
-| ⚪ xAI Grok          | Grok Build             |
+Sign in with any subscription you already have — no API key:
+
+- 🟣 **Claude** — Claude Code / Pro / Max
+- 🟢 **Codex** — ChatGPT Plus / Pro
+- 🔵 **Gemini** — Gemini CLI
+- ⚪ **Grok** — Grok Build
+- 🟡 **Kimi** — Moonshot
+- ⚫ **Antigravity**
+
+> [!WARNING]
+> **Use entirely at your own risk and discretion.** This extension routes chat through your personal AI **subscription** accounts (Claude, ChatGPT / Codex, Gemini, …) over OAuth. Accessing these subscriptions outside their official apps may violate the providers' **Terms of Service** and could result in rate limiting or account suspension. You alone are responsible for how you use it.
 
 ## Quick start
 
 > Requires **VS Code 1.124+** and the **GitHub Copilot Chat** extension.
 
-1. **Install** — get *Universal Chat Provider* from the **VS Code Marketplace** _(coming soon)_. Prefer to build it yourself? See [Development](#development).
+1. **Install** — get *Universal Chat Provider* from the **[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=maxdewald.universal-chat-provider)**. Prefer to build it yourself? See [Development](#development).
 2. **Add an account** — accept the **Add Account** prompt (or run *Universal Chat Provider: Add Account (Login)*), pick a provider, and complete OAuth in your browser. Models refresh automatically.
 3. **Chat** — open Copilot Chat and select a model under **Universal Chat Provider**.
 
@@ -76,9 +81,6 @@ The API key is stored in VS Code `SecretStorage`. In external mode the extension
 
 </details>
 
-> [!WARNING]
-> **Use entirely at your own risk and discretion.** This extension routes chat through your personal AI **subscription** accounts (Claude, ChatGPT / Codex, Gemini, …) over OAuth. Accessing these subscriptions outside their official apps may violate the providers' **Terms of Service** and could result in rate limiting or account suspension. You alone are responsible for how you use it.
-
 ## Utility model
 
 Copilot generates commit messages, chat titles, and summaries with its own background models. Run *Universal Chat Provider: Set Utility Model* (or use the status bar menu) to point Copilot's `chat.utilityModel` and `chat.utilitySmallModel` at one of your subscription models instead, so those background flows run through your accounts. No Copilot subscription required. Clear the selection to undo.
@@ -96,17 +98,6 @@ GitHub Copilot Chat normally only talks to Copilot's own models. This extension 
   │ Grok · Kimi · …    │──┘  │   (OAuth)    │  └─▶│  Utility model    │
   └────────────────────┘     └──────────────┘     └──────────────────┘
 ```
-
-<details>
-<summary><b>Caching &amp; token counting</b></summary>
-
-<br>
-
-The provider reads CLIProxyAPI's standard and enhanced model-list endpoints and streams text, thinking summaries, tool calls, and usage. Requests carry a stable `prompt_cache_key` (also sent as `Session_id`) so Codex prompt-cache reuse, reasoning replay, and optional `session-affinity` selection stay sticky.
-
-VS Code requires custom providers to implement `provideTokenCount`. This is served by a fast local heuristic (`tokenx`, no tokenizer vocab and no network round-trip), since the count only steers VS Code's context-window compression — the real accounting comes from the upstream provider's `usage` numbers in each streamed response.
-
-</details>
 
 ## Configuration
 
