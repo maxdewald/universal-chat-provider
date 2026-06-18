@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.4](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.7.3...v0.7.4) (2026-06-18)
+
+
+### Documentation
+
+* add Kimi badge to README for visibility ([c11409e](https://github.com/maxdewald/vscode-universal-chat-provider/commit/c11409e7e490f5c9d40f0204fc413b0594e4d94e))
+* clarify VS Code Copilot Chat positioning, fix retired badges ([387037e](https://github.com/maxdewald/vscode-universal-chat-provider/commit/387037e374ecc6da68b699df5914c3f12a81e570))
+* update package description for clarity and detail ([587654d](https://github.com/maxdewald/vscode-universal-chat-provider/commit/587654d2d0f72b9500a1795a1fc9442b5b75a009))
+* update README badges for consistency and clarity ([ba881d9](https://github.com/maxdewald/vscode-universal-chat-provider/commit/ba881d9a77648ce92478d6cb9a94f3be3cf523d4))
+* update README for command formatting and clarity ([def1fef](https://github.com/maxdewald/vscode-universal-chat-provider/commit/def1fef8f40bc33fc9644a51a71886985cf51438))
+
 ## [0.7.3](https://github.com/maxdewald/universal-chat-provider/compare/v0.7.2...v0.7.3) (2026-06-18)
 
 
