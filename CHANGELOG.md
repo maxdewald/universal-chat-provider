@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.8.1...v0.8.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* lockfile ([7bc0c46](https://github.com/maxdewald/vscode-universal-chat-provider/commit/7bc0c46af5686655b6ac803fbc744e0349c49238))
+
 ## [0.8.1](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.8.0...v0.8.1) (2026-06-19)
 
 
