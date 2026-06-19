@@ -85,16 +85,23 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
     token: CancellationToken,
   ): Promise<void> {
     const request = buildRequest(model, messages, options, model.reasoningEffort)
+    const reasoning = new ReasoningTextFallback(
+      vscode.workspace.getConfiguration('universalChatProvider').get<boolean>('showReasoning', true),
+    )
     await streamCompletion(
       this.completionDeps(),
       request,
       {
-        onText: delta => progress.report(new LanguageModelTextPart(delta)),
-        // LanguageModelThinkingPart is a proposed API: present on Insiders, absent on stable.
+        onText: (delta) => {
+          const separator = reasoning.close()
+          if (separator !== undefined)
+            progress.report(new LanguageModelTextPart(separator))
+          progress.report(new LanguageModelTextPart(delta))
+        },
         onThinking: (delta) => {
-          const ThinkingPart = (vscode as { LanguageModelThinkingPart?: new (value: string) => LanguageModelResponsePart }).LanguageModelThinkingPart
-          if (ThinkingPart !== undefined)
-            progress.report(new ThinkingPart(delta))
+          const text = reasoning.format(delta)
+          if (text !== undefined)
+            progress.report(new LanguageModelTextPart(text))
         },
         onToolCall: (callId, name, input) =>
           progress.report(new LanguageModelToolCallPart(callId, name, input)),
@@ -149,5 +156,26 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
       credentials: this.credentials,
       onCredentialsRejected: () => void this.credentialFlows.showCredentialRecovery(),
     }
+  }
+}
+
+class ReasoningTextFallback {
+  private open = false
+
+  constructor(private readonly enabled: boolean) {}
+
+  format(delta: string): string | undefined {
+    if (!this.enabled || delta.length === 0)
+      return undefined
+    const prefix = this.open ? '' : '> **Thinking**\n> '
+    this.open = true
+    return `${prefix}${delta.replace(/\n/g, '\n> ')}`
+  }
+
+  close(): string | undefined {
+    if (!this.open)
+      return undefined
+    this.open = false
+    return '\n\n'
   }
 }

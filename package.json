@@ -154,6 +154,11 @@
           "minimum": 1024,
           "description": "Fallback output-token limit when CLIProxyAPI provides no model-specific value."
         },
+        "universalChatProvider.showReasoning": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show model reasoning summaries inline when a reasoning model emits them."
+        },
         "universalChatProvider.debug": {
           "type": "boolean",
           "default": false,
