@@ -1,5 +1,11 @@
 import { execSync } from 'node:child_process'
+import { builtinModules } from 'node:module'
 import { defineConfig } from 'tsdown'
+
+const nodeBuiltins = new Set([
+  ...builtinModules,
+  ...builtinModules.map(module => `node:${module}`),
+])
 
 export default defineConfig({
   entry: [
@@ -10,13 +16,7 @@ export default defineConfig({
   dts: false,
   deps: {
     neverBundle: ['vscode'],
-    alwaysBundle: [
-      'fflate',
-      'get-port',
-      'nanotar',
-      'tokenx',
-      'yaml',
-    ],
+    alwaysBundle: id => id !== 'vscode' && !nodeBuiltins.has(id),
     // Silences tsdown's "unintended bundling" hint; bundling is deliberate here.
     onlyBundle: false,
   },
