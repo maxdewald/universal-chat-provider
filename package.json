@@ -193,7 +193,7 @@
     "@antfu/eslint-config": "^9.0.0",
     "@types/node": "^24.13.2",
     "@types/semver": "^7.7.1",
-    "@types/vscode": "^1.125.0",
+    "@types/vscode": "^1.124.0",
     "@vitest/coverage-v8": "^4.1.8",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^10.5.0",
