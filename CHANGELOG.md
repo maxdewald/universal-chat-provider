@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.8.2...v0.8.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* moderndash startup crash because it was not bundled ([e01ad03](https://github.com/maxdewald/vscode-universal-chat-provider/commit/e01ad0320e273451ef2b207c03a5a6be2016a80c))
+
 ## [0.8.2](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.8.1...v0.8.2) (2026-06-19)
 
 
