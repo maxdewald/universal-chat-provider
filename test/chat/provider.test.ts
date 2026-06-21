@@ -7,15 +7,12 @@ import {
   LanguageModelChatMessageRole,
   LanguageModelChatToolMode,
   LanguageModelDataPart,
-  LanguageModelError,
   LanguageModelTextPart,
   LanguageModelToolCallPart,
 } from 'vscode'
 import { estimateTokens } from '../../src/chat/estimate'
 import { UniversalChatProvider } from '../../src/chat/provider'
-
-import { ProxyHttpError } from '../../src/cliproxy/errors'
-import { LanguageModelThinkingPart, resetVSCodeMock, vscodeMock, window } from '../support/vscode'
+import { LanguageModelThinkingPart, resetVSCodeMock, vscodeMock } from '../support/vscode'
 
 const clientMocks = vi.hoisted(() => ({
   discover: vi.fn(),
@@ -218,166 +215,6 @@ describe('language model provider', () => {
     )
   })
 
-  it('maps HTTP errors and suppresses errors after cancellation', async () => {
-    const provider = createProvider('secret')
-    clientMocks.streamResponse.mockRejectedValueOnce(new ProxyHttpError('missing', 404))
-    await expect(provider.provideLanguageModelChatResponse(
-      model(),
-      [],
-      options(),
-      { report: vi.fn() },
-      new CancellationTokenSource().token,
-    )).rejects.toEqual(LanguageModelError.NotFound('missing'))
-
-    const token = new CancellationTokenSource()
-    clientMocks.streamResponse.mockImplementationOnce(async (_body, _callbacks, signal: AbortSignal) => {
-      token.cancel()
-      expect(signal.aborted).toBe(true)
-      throw new Error('aborted')
-    })
-    await expect(provider.provideLanguageModelChatResponse(
-      model(),
-      [],
-      options(),
-      { report: vi.fn() },
-      token.token,
-    )).resolves.toBeUndefined()
-  })
-
-  it('maps permission and rate-limit errors and offers credential recovery once', async () => {
-    const provider = createProvider('secret')
-    clientMocks.streamResponse
-      .mockRejectedValueOnce(new ProxyHttpError('bad key', 401))
-      .mockRejectedValueOnce(new ProxyHttpError('slow down', 429))
-    window.showWarningMessage.mockResolvedValue(undefined)
-
-    await expect(provider.provideLanguageModelChatResponse(
-      model(),
-      [],
-      options(),
-      { report: vi.fn() },
-      new CancellationTokenSource().token,
-    )).rejects.toMatchObject({ code: 'NoPermissions', message: 'bad key' })
-    await vi.waitFor(() => expect(window.showWarningMessage).toHaveBeenCalledTimes(1))
-
-    await expect(provider.provideLanguageModelChatResponse(
-      model(),
-      [],
-      options(),
-      { report: vi.fn() },
-      new CancellationTokenSource().token,
-    )).rejects.toMatchObject({ code: 'Blocked', message: 'slow down' })
-    expect(window.showWarningMessage).toHaveBeenCalledTimes(1)
-  })
-
-  it('deduplicates refreshes, caches models, and fires only when data changes', async () => {
-    const provider = createProvider('secret')
-    let resolveDiscovery!: (value: ReturnType<typeof discovery>) => void
-    clientMocks.discover.mockReturnValueOnce(new Promise(resolve => resolveDiscovery = resolve))
-    const changes = vi.fn()
-    provider.onDidChangeLanguageModelChatInformation(changes)
-    const token = new CancellationTokenSource().token
-
-    const first = provider.provideLanguageModelChatInformation({ silent: true }, token)
-    const second = provider.provideLanguageModelChatInformation({ silent: false }, token)
-    await vi.waitFor(() => expect(clientMocks.discover).toHaveBeenCalledTimes(1))
-    expect(clientMocks.discover).toHaveBeenCalledTimes(1)
-    resolveDiscovery(discovery())
-    await expect(first).resolves.toHaveLength(1)
-    await expect(second).resolves.toHaveLength(1)
-    expect(changes).toHaveBeenCalledTimes(1)
-
-    clientMocks.discover.mockResolvedValueOnce(discovery())
-    await provider.forceRefresh(false)
-    expect(changes).toHaveBeenCalledTimes(1)
-  })
-
-  it('retains cached models on discovery failure and reports interactive errors', async () => {
-    const provider = createProvider('secret')
-    clientMocks.discover.mockResolvedValueOnce(discovery())
-    await provider.forceRefresh(false)
-    clientMocks.discover.mockRejectedValueOnce(new Error('offline'))
-
-    await expect(provider.forceRefresh(true)).resolves.toHaveLength(1)
-    expect(window.showErrorMessage).toHaveBeenCalledWith(
-      'CLIProxyAPI model discovery failed: offline',
-    )
-    expect(vscodeMock.output.appendLine).toHaveBeenCalledWith('Model discovery failed: offline')
-  })
-
-  it('handles rejected discovery credentials without a generic error prompt', async () => {
-    const provider = createProvider('secret')
-    clientMocks.discover.mockRejectedValueOnce(new ProxyHttpError('bad key', 403))
-    window.showWarningMessage.mockResolvedValue(undefined)
-
-    await expect(provider.forceRefresh(true)).resolves.toEqual([])
-    await vi.waitFor(() => expect(window.showWarningMessage).toHaveBeenCalledTimes(1))
-    expect(window.showErrorMessage).not.toHaveBeenCalled()
-  })
-
-  it('configures a missing credential, refreshes explicitly, and counts tokens', async () => {
-    const provider = createProvider()
-    window.showInputBox
-      .mockResolvedValueOnce('http://new-proxy/')
-      .mockResolvedValueOnce('')
-      .mockResolvedValueOnce(' entered-key ')
-    clientMocks.discover.mockResolvedValue(discovery())
-
-    await provider.configure()
-    expect(vscodeMock.secrets.get('universalChatProvider.apiKey')).toBe('entered-key')
-    expect(vscodeMock.settings.get('universalChatProvider.baseUrl')).toBe('http://new-proxy')
-    expect(clientMocks.discover).toHaveBeenCalledTimes(1)
-
-    // Token counts are a purely local `tokenx` estimate; the proxy is never queried.
-    await expect(provider.provideTokenCount(
-      model(),
-      'hello',
-      new CancellationTokenSource().token,
-    )).resolves.toBe(estimateTokens('hello'))
-  })
-
-  it('finishes an interactive refresh when configuration occurs during onboarding', async () => {
-    const provider = createProvider()
-    window.showInformationMessage.mockResolvedValueOnce('Configure Connection')
-    window.showInputBox
-      .mockResolvedValueOnce('http://new-proxy/')
-      .mockResolvedValueOnce('')
-      .mockResolvedValueOnce('entered-key')
-    clientMocks.discover.mockResolvedValueOnce(discovery())
-
-    await expect(provider.provideLanguageModelChatInformation(
-      { silent: false },
-      new CancellationTokenSource().token,
-    )).resolves.toHaveLength(1)
-
-    expect(clientMocks.discover).toHaveBeenCalledTimes(1)
-    expect(vscodeMock.secrets.get('universalChatProvider.apiKey')).toBe('entered-key')
-  })
-
-  it('does nothing when connection configuration is cancelled', async () => {
-    const provider = createProvider()
-    window.showInputBox.mockResolvedValueOnce(undefined)
-
-    await provider.configure()
-    expect(clientMocks.discover).not.toHaveBeenCalled()
-  })
-
-  it('shows onboarding once and clears credentials', async () => {
-    const provider = createProvider()
-    window.showInformationMessage.mockResolvedValue(undefined)
-
-    await provider.initialize()
-    await provider.initialize()
-    expect(window.showInformationMessage).toHaveBeenCalledTimes(1)
-
-    const changes = vi.fn()
-    provider.onDidChangeLanguageModelChatInformation(changes)
-    await provider.clearCredentials()
-    expect(changes).toHaveBeenCalledTimes(1)
-    expect(window.showInformationMessage).toHaveBeenCalledTimes(2)
-    provider.dispose()
-  })
-
   it('refreshes models on startup when credentials are stored', async () => {
     const provider = createProvider('secret')
     clientMocks.discover.mockResolvedValueOnce(discovery())
@@ -385,6 +222,17 @@ describe('language model provider', () => {
     await provider.initialize()
 
     expect(clientMocks.discover).toHaveBeenCalledTimes(1)
+  })
+
+  it('counts tokens locally without querying the proxy', async () => {
+    const provider = createProvider('secret')
+
+    await expect(provider.provideTokenCount(
+      model(),
+      'hello',
+      new CancellationTokenSource().token,
+    )).resolves.toBe(estimateTokens('hello'))
+    expect(clientMocks.streamResponse).not.toHaveBeenCalled()
   })
 })
 

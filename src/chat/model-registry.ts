@@ -89,6 +89,7 @@ export class ModelRegistry {
       ])
       const models = mapProxyModels(discovery.available, discovery.metadata, catalog, {
         onSkipped: (id, reason) => this.output.appendLine(`Skipped model ${id}: ${reason}.`),
+        onCollision: message => this.output.appendLine(message),
       })
       const fingerprint = JSON.stringify(models)
       if (fingerprint !== this.cachedFingerprint) {

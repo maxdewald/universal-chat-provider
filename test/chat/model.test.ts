@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { flattenCatalog } from '../../src/chat/catalog'
 import { mapProxyModels } from '../../src/chat/model'
 
 describe('model mapping', () => {
@@ -137,6 +136,28 @@ describe('model mapping', () => {
     })
   })
 
+  it('logs unresolved display-name collisions with every candidate id', () => {
+    const collisions: string[] = []
+    const levels = [{ effort: 'low' }, { effort: 'high' }]
+    const models = mapProxyModels(
+      [
+        { id: 'model-a', owned_by: 'proxy', context_length: 128_000, max_completion_tokens: 8192 },
+        { id: 'model-b', owned_by: 'proxy', context_length: 128_000, max_completion_tokens: 8192 },
+      ],
+      [
+        { slug: 'model-a', display_name: 'Model (Low)', supported_reasoning_levels: levels },
+        { slug: 'model-b', display_name: 'Model (High)', supported_reasoning_levels: levels },
+      ],
+      new Map(),
+      { onCollision: message => collisions.push(message) },
+    )
+
+    expect(models.map(model => model.proxyModelId)).toEqual(['model-a'])
+    expect(collisions).toEqual([
+      'Model display collision for Proxy "Model": model-a, model-b; keeping model-a.',
+    ])
+  })
+
   it('keeps fixed reasoning names when no selector can be offered', () => {
     const [model] = mapProxyModels(
       [{ id: 'fixed-high', owned_by: 'proxy', context_length: 128_000, max_completion_tokens: 8192 }],
@@ -178,15 +199,18 @@ describe('model mapping', () => {
     // Distinct aliases stay distinct: each survives as its own selector entry.
     expect(models).toHaveLength(2)
     expect(new Set(models.map(model => model.proxyModelId))).toEqual(new Set(['model-high', 'model-low']))
+    expect(new Set(models.map(model => model.name))).toEqual(new Set(['Model (High)', 'Model (Low)']))
   })
 
-  it('flattens provider catalogs and prefers richer duplicate metadata', () => {
-    const catalog = flattenCatalog({
-      openai: [{ id: 'shared', context_length: 128_000 }],
-      aliases: [{ id: 'shared', context_length: 128_000, thinking: { levels: ['low', 'high'] } }],
-    })
+  it('humanizes ids only when no display name is available', () => {
+    const [model] = mapProxyModels(
+      [{ id: 'mystery-model_low', owned_by: 'proxy', context_length: 128_000, max_completion_tokens: 8192 }],
+      [],
+      new Map(),
+      {},
+    )
 
-    expect(catalog.get('shared')?.thinking?.levels).toEqual(['low', 'high'])
+    expect(model?.name).toBe('Mystery Model Low')
   })
 
   it('derives reasoning levels and capability fallbacks from the catalog', () => {
@@ -406,13 +430,5 @@ describe('model mapping', () => {
     // of it only made Copilot compact early, so input always gets the full window.
     expect(haiku).toMatchObject({ id: 'claude-haiku', maxInputTokens: 200_000 })
     expect(over).toMatchObject({ id: 'over-reported', maxInputTokens: 100_000 })
-  })
-
-  it('ignores malformed catalog sections', () => {
-    expect(flattenCatalog(null)).toEqual(new Map())
-    expect(flattenCatalog({
-      invalid: 'not an array',
-      entries: [null, {}, { id: 1 }, { id: 'valid', outputTokenLimit: 20 }],
-    })).toEqual(new Map([['valid', { id: 'valid', outputTokenLimit: 20 }]]))
   })
 })

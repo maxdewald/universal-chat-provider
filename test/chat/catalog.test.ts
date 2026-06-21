@@ -37,3 +37,26 @@ describe('fetchCatalog', () => {
     await expect(fetchCatalog()).resolves.toEqual(new Map())
   })
 })
+
+describe('flattenCatalog', () => {
+  it('prefers richer duplicate metadata', async () => {
+    const { flattenCatalog } = await import('../../src/chat/catalog')
+
+    const catalog = flattenCatalog({
+      openai: [{ id: 'shared', context_length: 128_000 }],
+      aliases: [{ id: 'shared', context_length: 128_000, thinking: { levels: ['low', 'high'] } }],
+    })
+
+    expect(catalog.get('shared')?.thinking?.levels).toEqual(['low', 'high'])
+  })
+
+  it('ignores malformed catalog sections', async () => {
+    const { flattenCatalog } = await import('../../src/chat/catalog')
+
+    expect(flattenCatalog(null)).toEqual(new Map())
+    expect(flattenCatalog({
+      invalid: 'not an array',
+      entries: [null, {}, { id: 1 }, { id: 'valid', outputTokenLimit: 20 }],
+    })).toEqual(new Map([['valid', { id: 'valid', outputTokenLimit: 20 }]]))
+  })
+})

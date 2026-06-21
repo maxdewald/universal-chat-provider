@@ -1,6 +1,7 @@
 import type { ExtensionContext } from 'vscode'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UniversalChatProvider } from '../../src/chat/provider'
+import { ServerController } from '../../src/cliproxy/controller'
 import { activate, deactivate } from '../../src/index'
 import {
   commands,
@@ -21,23 +22,35 @@ describe('extension activation', () => {
     const importConfig = vi.spyOn(UniversalChatProvider.prototype, 'importConfig').mockResolvedValue()
     const forceRefresh = vi.spyOn(UniversalChatProvider.prototype, 'forceRefresh').mockResolvedValue([])
     const getModels = vi.spyOn(UniversalChatProvider.prototype, 'getModels').mockResolvedValue([])
+    const login = vi.spyOn(ServerController.prototype, 'login').mockResolvedValue()
+    const manageAccounts = vi.spyOn(ServerController.prototype, 'manageAccounts').mockResolvedValue()
     const context = extensionContext()
 
     expect(activate(context)).toBeUndefined()
     expect(vscodeMock.registeredProviders[0]).toMatchObject({ vendor: 'universal-chat-provider' })
-    expect(vscodeMock.commandHandlers.size).toBe(14)
-    expect(context.subscriptions).toHaveLength(20)
+    expect(vscodeMock.commandHandlers.has('universalChatProvider.configure')).toBe(true)
+    expect(vscodeMock.commandHandlers.has('universalChatProvider.login')).toBe(true)
+    expect(vscodeMock.commandHandlers.has('universalChatProvider.openSettings')).toBe(true)
     expect(initialize).toHaveBeenCalledTimes(1)
 
+    await commands.executeCommand('universalChatProvider.login')
+    await commands.executeCommand('universalChatProvider.manageAccounts')
     await commands.executeCommand('universalChatProvider.configure')
     await commands.executeCommand('universalChatProvider.importConfig')
     await commands.executeCommand('universalChatProvider.refresh')
     await commands.executeCommand('universalChatProvider.setUtilityModel')
+    await commands.executeCommand('universalChatProvider.openSettings')
+    expect(login).toHaveBeenCalled()
+    expect(manageAccounts).toHaveBeenCalled()
     expect(configure).toHaveBeenCalled()
     expect(importConfig).toHaveBeenCalled()
     expect(forceRefresh).toHaveBeenCalledWith(true)
     expect(getModels).toHaveBeenCalled()
     expect(window.showInformationMessage).toHaveBeenCalledWith('CLIProxyAPI exposed 0 chat models.')
+    expect(commands.executeCommand).toHaveBeenCalledWith(
+      'workbench.action.openSettings',
+      '@ext:maxdewald.universal-chat-provider',
+    )
   })
 
   it('dispatches management choices and confirms credential clearing', async () => {

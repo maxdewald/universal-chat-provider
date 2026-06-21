@@ -50,12 +50,26 @@ interface ModelConfigurationSchema {
 
 export interface ModelMappingOptions {
   onSkipped?: (id: string, reason: string) => void
+  onCollision?: (message: string) => void
 }
 
 // A trailing reasoning qualifier such as " (Thinking)" or " (Low)" that some
 // providers append to a model's name. Stripped both when deriving the display
 // name and when comparing a description against it.
 const REASONING_NAME_SUFFIX = /\s+\((?:thinking|none|minimal|low|medium|high|extra high|xhigh|max|auto)\)$/i
+
+interface ModelCandidate {
+  entry: ProxyModelListEntry
+  detail: ProxyModelMetadata | undefined
+  catalogModel: CatalogModel | undefined
+  providerName: string
+  advertisedName: string
+  baseName: string
+  levels: string[]
+  levelSignature: string
+  totalContext: number
+  outputTokens: number
+}
 
 export function mapProxyModels(
   available: readonly ProxyModelListEntry[],
@@ -65,8 +79,7 @@ export function mapProxyModels(
 ): ProviderModel[] {
   const metadataById = new Map(metadata.map(model => [model.slug, model]))
   const seen = new Set<string>()
-  const seenReasoningModels = new Map<string, string>()
-  const result: ProviderModel[] = []
+  const candidates: ModelCandidate[] = []
 
   for (const entry of available) {
     if (!entry.id || seen.has(entry.id))
@@ -104,95 +117,148 @@ export function mapProxyModels(
       continue
     }
     const levels = resolveReasoning(detail, catalogModel)
-    const advertisedName = detail?.display_name ?? catalogModel?.display_name ?? entry.id
-    let displayName = normalizeReasoningModelName(advertisedName, levels)
+    const advertisedName = displayModelName(entry.id, detail, catalogModel)
+    const baseName = normalizeReasoningModelName(advertisedName, levels)
     const providerName = entry.owned_by ?? catalogModel?.type ?? 'proxy'
-    const displayProviderName = formatProviderName(providerName)
-    // Dedupe same-base-name ids that share a reasoning-level set. A different
-    // level set keeps its qualifier and stays distinct.
-    if (levels.length >= 2) {
-      const reasoningModelKey = `${providerName}\0${displayName}`.toLowerCase()
-      const levelSignature = [...levels].sort().join('\0')
-      const existingSignature = seenReasoningModels.get(reasoningModelKey)
-      if (existingSignature === levelSignature)
-        continue
-      if (existingSignature === undefined)
-        seenReasoningModels.set(reasoningModelKey, levelSignature)
-      else
-        displayName = advertisedName
-    }
-    const imageInput = detail?.input_modalities?.includes('image')
-      ?? catalogModel?.supportedInputModalities?.some(value => value.toLowerCase() === 'image')
-      ?? false
-    // `supports_parallel_tool_calls` is the only tool-related flag the proxy
-    // reports, so its presence (true or false) means the model does tool calls;
-    // its value only decides whether several may run in one turn.
-    const parallelToolCalls = detail?.supports_parallel_tool_calls
-    const supportsParallelToolCalls = parallelToolCalls ?? true
-    const toolCalling = parallelToolCalls !== undefined
-      || (catalogModel?.supported_parameters?.includes('tools') ?? true)
-    const family = catalogModel?.type ?? inferFamily(entry.id)
-    const description = detail?.description ?? catalogModel?.description
-    const tooltip = buildTooltip(displayName, description, displayProviderName, outputTokens, imageInput, toolCalling)
-
-    const baseModel = {
-      proxyModelId: entry.id,
-      family,
-      version: catalogModel?.version ?? entry.id,
-      // The full context window. `maxInputTokens` is the only field VS Code
-      // budgets against — Copilot compacts as the prompt approaches it — and is
-      // a separate dimension from `maxOutputTokens`, so we advertise the whole
-      // window and let Copilot headroom and the server enforce input+output.
-      // Carving an output reserve out of it only made Copilot summarize early.
-      maxInputTokens: totalContext,
-      maxOutputTokens: outputTokens,
-      supportsParallelToolCalls,
-      detail: `${formatTokens(totalContext)} context · ${displayProviderName}`,
-      tooltip,
-      capabilities: {
-        imageInput,
-        toolCalling,
-      },
-    }
-
-    // A model with multiple reasoning levels gets a single picker entry; the
-    // level is chosen through a "Thinking Effort" dropdown that VS Code renders
-    // from configurationSchema and echoes back as options.modelConfiguration.
-    if (levels.length >= 2) {
-      const ordered = [...levels].sort((a, b) => effortRank(a) - effortRank(b))
-      const defaultLevel = ordered[ordered.length - 1]!
-      result.push({
-        ...baseModel,
-        id: entry.id,
-        name: displayName,
-        reasoningLevels: ordered,
-        reasoningEffort: defaultLevel,
-        configurationSchema: {
-          properties: {
-            reasoningEffort: {
-              type: 'string',
-              enum: ordered,
-              enumItemLabels: ordered.map(formatLevel),
-              default: defaultLevel,
-              description: 'Thinking Effort',
-              group: 'navigation',
-            },
-          },
-        },
-      })
-    }
-    else {
-      result.push({ ...baseModel, id: entry.id, name: displayName, reasoningLevels: levels })
-    }
+    candidates.push({
+      entry,
+      detail,
+      catalogModel,
+      providerName,
+      advertisedName,
+      baseName,
+      levels,
+      levelSignature: [...levels].sort().join('\0'),
+      totalContext,
+      outputTokens,
+    })
   }
 
-  return result.sort((a, b) => {
+  const winners = chooseDisplayModelWinners(candidates, options)
+  const ambiguousNames = ambiguousDisplayNames(winners)
+  return winners.map(candidate => toProviderModel(candidate, ambiguousNames.has(displayBaseKey(candidate)))).sort((a, b) => {
     const baseA = a.name.replace(REASONING_NAME_SUFFIX, '')
     const baseB = b.name.replace(REASONING_NAME_SUFFIX, '')
     return baseA === baseB
       ? effortRank(a.reasoningEffort) - effortRank(b.reasoningEffort)
       : baseA.localeCompare(baseB)
   })
+}
+
+function chooseDisplayModelWinners(candidates: readonly ModelCandidate[], options: ModelMappingOptions): ModelCandidate[] {
+  const byDisplay = new Map<string, ModelCandidate[]>()
+  for (const candidate of candidates) {
+    const key = displayDedupeKey(candidate)
+    const existing = byDisplay.get(key)
+    if (existing === undefined)
+      byDisplay.set(key, [candidate])
+    else
+      existing.push(candidate)
+  }
+
+  return Array.from(byDisplay.values(), group => chooseDisplayModelWinner(group, options))
+}
+
+function chooseDisplayModelWinner(candidates: readonly ModelCandidate[], options: ModelMappingOptions): ModelCandidate {
+  const first = candidates[0]!
+  if (candidates.length === 1)
+    return first
+
+  options.onCollision?.(formatCollision(first, candidates))
+  return first
+}
+
+function formatCollision(kept: ModelCandidate, candidates: readonly ModelCandidate[]): string {
+  return `Model display collision for ${formatProviderName(kept.providerName)} "${kept.baseName}": ${candidates.map(candidate => candidate.entry.id).join(', ')}; keeping ${kept.entry.id}.`
+}
+
+function ambiguousDisplayNames(candidates: readonly ModelCandidate[]): Set<string> {
+  const seen = new Set<string>()
+  const ambiguous = new Set<string>()
+  for (const candidate of candidates) {
+    const key = displayBaseKey(candidate)
+    if (seen.has(key))
+      ambiguous.add(key)
+    else
+      seen.add(key)
+  }
+  return ambiguous
+}
+
+function displayDedupeKey(candidate: ModelCandidate): string {
+  return `${displayBaseKey(candidate)}\0${candidate.levelSignature}`
+}
+
+function displayBaseKey(candidate: ModelCandidate): string {
+  return `${candidate.providerName}\0${candidate.baseName}`.toLowerCase()
+}
+
+function toProviderModel(candidate: ModelCandidate, useAdvertisedName: boolean): ProviderModel {
+  const { entry, detail, catalogModel, providerName, levels, totalContext, outputTokens } = candidate
+  const name = useAdvertisedName ? candidate.advertisedName : candidate.baseName
+  const displayProviderName = formatProviderName(providerName)
+  const imageInput = detail?.input_modalities?.includes('image')
+    ?? catalogModel?.supportedInputModalities?.some(value => value.toLowerCase() === 'image')
+    ?? false
+  // `supports_parallel_tool_calls` is the only tool-related flag the proxy
+  // reports, so its presence (true or false) means the model does tool calls;
+  // its value only decides whether several may run in one turn.
+  const parallelToolCalls = detail?.supports_parallel_tool_calls
+  const supportsParallelToolCalls = parallelToolCalls ?? true
+  const toolCalling = parallelToolCalls !== undefined
+    || (catalogModel?.supported_parameters?.includes('tools') ?? true)
+  const family = catalogModel?.type ?? inferFamily(entry.id)
+  const description = detail?.description ?? catalogModel?.description
+  const tooltip = buildTooltip(name, description, displayProviderName, outputTokens, imageInput, toolCalling)
+
+  const baseModel = {
+    proxyModelId: entry.id,
+    family,
+    version: catalogModel?.version ?? entry.id,
+    // The full context window. `maxInputTokens` is the only field VS Code
+    // budgets against — Copilot compacts as the prompt approaches it — and is
+    // a separate dimension from `maxOutputTokens`, so we advertise the whole
+    // window and let Copilot headroom and the server enforce input+output.
+    // Carving an output reserve out of it only made Copilot summarize early.
+    maxInputTokens: totalContext,
+    maxOutputTokens: outputTokens,
+    supportsParallelToolCalls,
+    detail: `${formatTokens(totalContext)} context · ${displayProviderName}`,
+    tooltip,
+    capabilities: {
+      imageInput,
+      toolCalling,
+    },
+  }
+
+  // A model with multiple reasoning levels gets a single picker entry; the
+  // level is chosen through a "Thinking Effort" dropdown that VS Code renders
+  // from configurationSchema and echoes back as options.modelConfiguration.
+  if (levels.length >= 2) {
+    const ordered = [...levels].sort((a, b) => effortRank(a) - effortRank(b))
+    const defaultLevel = ordered[ordered.length - 1]!
+    return {
+      ...baseModel,
+      id: entry.id,
+      name,
+      reasoningLevels: ordered,
+      reasoningEffort: defaultLevel,
+      configurationSchema: {
+        properties: {
+          reasoningEffort: {
+            type: 'string',
+            enum: ordered,
+            enumItemLabels: ordered.map(formatLevel),
+            default: defaultLevel,
+            description: 'Thinking Effort',
+            group: 'navigation',
+          },
+        },
+      },
+    }
+  }
+
+  return { ...baseModel, id: entry.id, name, reasoningLevels: levels }
 }
 
 const EFFORT_RANK: Record<string, number> = { none: 0, minimal: 1, low: 2, medium: 3, high: 4, xhigh: 5, max: 6, auto: 7 }
@@ -298,6 +364,14 @@ function formatProviderName(value: string): string {
   const normalized = value.trim()
   return apps[normalized.toLowerCase()]
     ?? normalized.replace(/[a-z][\w'-]*/gi, word => capitalize(word))
+}
+
+function displayModelName(id: string, metadata: ProxyModelMetadata | undefined, catalog: CatalogModel | undefined): string {
+  return metadata?.display_name ?? catalog?.display_name ?? humanizeModelId(id)
+}
+
+function humanizeModelId(id: string): string {
+  return id.replace(/[-_/]+/g, ' ').replace(/[a-z][\w.]*/gi, word => capitalize(word))
 }
 
 function normalizeReasoningModelName(name: string, levels: readonly string[]): string {

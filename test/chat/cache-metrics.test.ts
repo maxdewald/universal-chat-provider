@@ -11,66 +11,61 @@ beforeEach(() => {
 })
 
 describe('normalizeUsage', () => {
-  it('reads Anthropic-native usage where input_tokens is the uncached remainder', () => {
-    const summary = normalizeUsage({
-      input_tokens: 300,
-      cache_read_input_tokens: 700,
-      cache_creation_input_tokens: 200,
-      output_tokens: 50,
-    })
-    expect(summary).toEqual({
-      shape: 'anthropic',
-      inputTokens: 1200,
-      cacheReadTokens: 700,
-      cacheWriteTokens: 200,
-      uncachedInputTokens: 300,
-      outputTokens: 50,
-      hitRate: 700 / 1200,
-    })
-  })
-
-  it('reads OpenAI Responses usage where input_tokens is the total', () => {
-    const summary = normalizeUsage({
-      input_tokens: 1000,
-      input_tokens_details: { cached_tokens: 800 },
-      output_tokens: 40,
-    })
-    expect(summary).toMatchObject({
-      shape: 'openai',
-      inputTokens: 1000,
-      cacheReadTokens: 800,
-      cacheWriteTokens: 0,
-      uncachedInputTokens: 200,
-      outputTokens: 40,
-      hitRate: 0.8,
-    })
-  })
-
-  it('falls back to Chat Completions field names', () => {
-    const summary = normalizeUsage({
-      prompt_tokens: 500,
-      prompt_tokens_details: { cached_tokens: 100 },
-      completion_tokens: 20,
-    })
-    expect(summary).toMatchObject({
-      shape: 'openai',
-      inputTokens: 500,
-      cacheReadTokens: 100,
-      uncachedInputTokens: 400,
-      outputTokens: 20,
-    })
-  })
-
-  it('reports an unknown shape with no hit rate when no cache fields are present', () => {
-    expect(normalizeUsage({ output_tokens: 3 })).toEqual({
-      shape: 'unknown',
-      inputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      uncachedInputTokens: 0,
-      outputTokens: 3,
-      hitRate: undefined,
-    })
+  it.each([
+    [
+      'Anthropic-native usage where input_tokens is the uncached remainder',
+      { input_tokens: 300, cache_read_input_tokens: 700, cache_creation_input_tokens: 200, output_tokens: 50 },
+      {
+        shape: 'anthropic',
+        inputTokens: 1200,
+        cacheReadTokens: 700,
+        cacheWriteTokens: 200,
+        uncachedInputTokens: 300,
+        outputTokens: 50,
+        hitRate: 700 / 1200,
+      },
+    ],
+    [
+      'OpenAI Responses usage where input_tokens is the total',
+      { input_tokens: 1000, input_tokens_details: { cached_tokens: 800 }, output_tokens: 40 },
+      {
+        shape: 'openai',
+        inputTokens: 1000,
+        cacheReadTokens: 800,
+        cacheWriteTokens: 0,
+        uncachedInputTokens: 200,
+        outputTokens: 40,
+        hitRate: 0.8,
+      },
+    ],
+    [
+      'Chat Completions field names',
+      { prompt_tokens: 500, prompt_tokens_details: { cached_tokens: 100 }, completion_tokens: 20 },
+      {
+        shape: 'openai',
+        inputTokens: 500,
+        cacheReadTokens: 100,
+        cacheWriteTokens: 0,
+        uncachedInputTokens: 400,
+        outputTokens: 20,
+        hitRate: 0.2,
+      },
+    ],
+    [
+      'unknown shape with no cache fields',
+      { output_tokens: 3 },
+      {
+        shape: 'unknown',
+        inputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        uncachedInputTokens: 0,
+        outputTokens: 3,
+        hitRate: undefined,
+      },
+    ],
+  ] as const)('reads %s', (_name, usage, expected) => {
+    expect(normalizeUsage(usage)).toEqual(expected)
   })
 
   it('tolerates a missing or non-object usage value', () => {

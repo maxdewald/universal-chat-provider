@@ -7,24 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { extractArchive, normalizeVersion, parseChecksums, readInstalledVersion, resolveAsset, sha256 } from '../../../src/cliproxy/managed/binary'
 
 describe('binary asset resolution', () => {
-  it('maps platform and arch to the matching release asset', () => {
-    expect(resolveAsset('darwin', 'arm64', '7.2.5')).toEqual({
-      assetName: 'CLIProxyAPI_7.2.5_darwin_aarch64.tar.gz',
-      binaryName: 'cli-proxy-api',
-      isZip: false,
-    })
-    expect(resolveAsset('darwin', 'x64', '7.2.5')).toMatchObject({
-      assetName: 'CLIProxyAPI_7.2.5_darwin_amd64.tar.gz',
-    })
-    expect(resolveAsset('linux', 'arm64', '7.2.5')).toMatchObject({
-      assetName: 'CLIProxyAPI_7.2.5_linux_aarch64.tar.gz',
-      binaryName: 'cli-proxy-api',
-    })
-    expect(resolveAsset('win32', 'x64', '7.2.5')).toEqual({
-      assetName: 'CLIProxyAPI_7.2.5_windows_amd64.zip',
-      binaryName: 'cli-proxy-api.exe',
-      isZip: true,
-    })
+  it.each([
+    ['darwin', 'arm64', { assetName: 'CLIProxyAPI_7.2.5_darwin_aarch64.tar.gz', binaryName: 'cli-proxy-api', isZip: false }],
+    ['darwin', 'x64', { assetName: 'CLIProxyAPI_7.2.5_darwin_amd64.tar.gz', binaryName: 'cli-proxy-api', isZip: false }],
+    ['linux', 'arm64', { assetName: 'CLIProxyAPI_7.2.5_linux_aarch64.tar.gz', binaryName: 'cli-proxy-api', isZip: false }],
+    ['win32', 'x64', { assetName: 'CLIProxyAPI_7.2.5_windows_amd64.zip', binaryName: 'cli-proxy-api.exe', isZip: true }],
+  ] as const)('maps %s/%s to the release asset', (platform, arch, expected) => {
+    expect(resolveAsset(platform, arch, '7.2.5')).toEqual(expected)
   })
 
   it('parses checksum lines into a filename map', () => {

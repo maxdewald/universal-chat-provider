@@ -7,28 +7,17 @@ beforeEach(() => {
 })
 
 describe('shouldNudge', () => {
-  // Copilot installed, override not yet pointed at our provider, not shown.
   const base = { alreadyShown: false, utilityModel: '', copilotInstalled: true }
 
-  it('nudges a Copilot user who has not routed the override to our provider', () => {
-    expect(shouldNudge(base)).toBe(true)
-  })
-
-  it('stays quiet once shown', () => {
-    expect(shouldNudge({ ...base, alreadyShown: true })).toBe(false)
-  })
-
-  it('stays quiet without Copilot — the setting is inert there', () => {
-    expect(shouldNudge({ ...base, copilotInstalled: false })).toBe(false)
-  })
-
-  it('stays quiet when already routed to our provider (whitespace ignored)', () => {
-    expect(shouldNudge({ ...base, utilityModel: 'universal-chat-provider/foo' })).toBe(false)
-    expect(shouldNudge({ ...base, utilityModel: '  universal-chat-provider/foo  ' })).toBe(false)
-  })
-
-  it('still nudges when the override points at some other vendor', () => {
-    expect(shouldNudge({ ...base, utilityModel: 'some-other-vendor/model' })).toBe(true)
+  it.each([
+    ['missing override', {}, true],
+    ['already shown', { alreadyShown: true }, false],
+    ['Copilot missing', { copilotInstalled: false }, false],
+    ['provider already selected', { utilityModel: 'universal-chat-provider/foo' }, false],
+    ['provider already selected with whitespace', { utilityModel: '  universal-chat-provider/foo  ' }, false],
+    ['other provider selected', { utilityModel: 'some-other-vendor/model' }, true],
+  ])('%s', (_name, overrides, expected) => {
+    expect(shouldNudge({ ...base, ...overrides })).toBe(expected)
   })
 })
 
@@ -45,7 +34,7 @@ describe('setUtilityModel', () => {
     expect(vscodeMock.settings.get('chat.utilitySmallModel')).toBe('universal-chat-provider/model-a')
     expect(provider.updateUtilityEffort).toHaveBeenCalledWith('model-a', 'high')
     expect(window.showInformationMessage).toHaveBeenCalledWith(
-      "Copilot's commit messages, chat titles and summaries now use Model A (High).",
+      'Copilot\'s commit messages, chat titles and summaries now use Model A (High).',
     )
   })
 
