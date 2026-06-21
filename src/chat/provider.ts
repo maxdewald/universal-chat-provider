@@ -28,6 +28,9 @@ import { CredentialFlows } from './credential-flows'
 import { estimateTokens } from './estimate'
 import { ModelRegistry } from './model-registry'
 import { buildRequest } from './request'
+import { lowestReasoningEffort } from './utility-model-nudge'
+
+const UTILITY_EFFORTS_KEY = 'universalChatProvider.utilityReasoningEfforts'
 
 // LanguageModelThinkingPart renders reasoning as a collapsible block that shrinks
 // once the answer streams in. Its type is still proposed, but the runtime class is
@@ -44,7 +47,7 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
   private readonly cacheMetrics: CacheMetricsTracker
 
   constructor(
-    context: ExtensionContext,
+    private readonly context: ExtensionContext,
     private readonly output: OutputChannel,
     private readonly connection: ProxyConnection = new SettingsConnection(),
   ) {
@@ -94,8 +97,14 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
   ): Promise<void> {
     // modelConfiguration carries the reasoning effort the user picked from the
     // model's configurationSchema dropdown; fall back to the model's default.
-    const modelConfiguration = (options as { modelConfiguration?: { reasoningEffort?: string } }).modelConfiguration
-    const chosenEffort = modelConfiguration?.reasoningEffort ?? model.reasoningEffort
+    const requestOptions = options as { modelConfiguration?: { reasoningEffort?: string }, requestInitiator?: string }
+    const storedUtilityEffort = this.getUtilityEffort(model.id)
+    const utilityEffort = storedUtilityEffort !== undefined && model.reasoningLevels.includes(storedUtilityEffort)
+      ? storedUtilityEffort
+      : lowestReasoningEffort(model.reasoningLevels)
+    const chosenEffort = requestOptions.requestInitiator === 'core'
+      ? utilityEffort ?? requestOptions.modelConfiguration?.reasoningEffort ?? model.reasoningEffort
+      : requestOptions.modelConfiguration?.reasoningEffort ?? model.reasoningEffort
     const request = buildRequest(model, messages, options, chosenEffort)
     await streamCompletion(
       this.completionDeps(),
@@ -141,6 +150,19 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
 
   async forceRefresh(interactive = true): Promise<ProviderModel[]> {
     return this.registry.forceRefresh(interactive)
+  }
+
+  getUtilityEffort(modelId: string): string | undefined {
+    return this.context.globalState.get<Record<string, string>>(UTILITY_EFFORTS_KEY, {})[modelId]
+  }
+
+  async updateUtilityEffort(modelId: string, effort: string | undefined): Promise<void> {
+    const next = { ...this.context.globalState.get<Record<string, string>>(UTILITY_EFFORTS_KEY, {}) }
+    if (effort === undefined)
+      delete next[modelId]
+    else
+      next[modelId] = effort
+    await this.context.globalState.update(UTILITY_EFFORTS_KEY, next)
   }
 
   async configure(): Promise<void> {

@@ -106,61 +106,93 @@
         "title": "Universal Chat Provider: Open Settings"
       }
     ],
-    "configuration": {
-      "type": "object",
-      "title": "Universal Chat Provider",
-      "properties": {
-        "universalChatProvider.server.mode": {
-          "type": "string",
-          "enum": [
-            "managed",
-            "external"
-          ],
-          "enumDescriptions": [
-            "Download and supervise a bundled CLIProxyAPI server automatically.",
-            "Connect to a CLIProxyAPI server you start yourself (uses Base URL and your own API key)."
-          ],
-          "default": "managed",
-          "description": "How the CLIProxyAPI server is provided. 'managed' runs it for you; 'external' connects to your own instance."
-        },
-        "universalChatProvider.server.version": {
-          "type": "string",
-          "default": "7.2.5",
-          "description": "CLIProxyAPI release to run in managed mode. Use a pinned version for reproducible installs, or 'latest' to track new releases."
-        },
-        "universalChatProvider.server.suggestUpdates": {
-          "type": "boolean",
-          "default": true,
-          "description": "When a pinned managed server has a newer release within the same major version, offer to update to it. New major versions are never suggested automatically. No effect with 'latest' or in external mode."
-        },
-        "universalChatProvider.baseUrl": {
-          "type": "string",
-          "default": "http://127.0.0.1:8317",
-          "description": "Base URL of the CLIProxyAPI server. Used only in external mode; the managed server picks its own port."
-        },
-        "universalChatProvider.configPath": {
-          "type": "string",
-          "default": "",
-          "description": "Optional path to CLIProxyAPI config.yaml for credential and model metadata discovery."
-        },
-        "universalChatProvider.autoDetectConfig": {
-          "type": "boolean",
-          "default": true,
-          "description": "Search common local CLIProxyAPI config locations when no config path is set."
-        },
-        "universalChatProvider.defaultMaxOutputTokens": {
-          "type": "number",
-          "default": 16384,
-          "minimum": 1024,
-          "description": "Fallback output-token limit when CLIProxyAPI provides no model-specific value."
-        },
-        "universalChatProvider.debug": {
-          "type": "boolean",
-          "default": false,
-          "description": "Debug mode: show the live prompt-cache hit rate in the status bar and write per-request diagnostics to debug.jsonl in the extension's global storage — token usage (cache-read vs cache-write vs uncached, with a hit rate), the request message-prefix fingerprints, and the cross-turn prefix diff (what changed since the previous turn, the thing that breaks the cache). Off by default; use it to diagnose caching and rate-limit issues."
+    "configuration": [
+      {
+        "type": "object",
+        "title": "Connection",
+        "order": 1,
+        "properties": {
+          "universalChatProvider.server.mode": {
+            "type": "string",
+            "enum": [
+              "managed",
+              "external"
+            ],
+            "enumItemLabels": [
+              "Managed",
+              "External"
+            ],
+            "enumDescriptions": [
+              "Download and run CLIProxyAPI automatically.",
+              "Connect to a CLIProxyAPI server you manage."
+            ],
+            "default": "managed",
+            "order": 1,
+            "description": "How CLIProxyAPI is provided."
+          },
+          "universalChatProvider.baseUrl": {
+            "type": "string",
+            "default": "http://127.0.0.1:8317",
+            "order": 2,
+            "description": "CLIProxyAPI server URL. Used only in external mode.",
+            "markdownDescription": "CLIProxyAPI server URL. Used only when `#universalChatProvider.server.mode#` is `external`."
+          },
+          "universalChatProvider.configPath": {
+            "type": "string",
+            "default": "",
+            "order": 3,
+            "description": "Optional CLIProxyAPI config.yaml path for credential and model metadata discovery.",
+            "markdownDescription": "Optional CLIProxyAPI `config.yaml` path for credential and model metadata discovery."
+          },
+          "universalChatProvider.autoDetectConfig": {
+            "type": "boolean",
+            "default": true,
+            "order": 4,
+            "description": "Search common CLIProxyAPI config locations when no config path is set."
+          }
+        }
+      },
+      {
+        "type": "object",
+        "title": "Managed Server",
+        "order": 2,
+        "properties": {
+          "universalChatProvider.server.version": {
+            "type": "string",
+            "default": "7.2.5",
+            "order": 1,
+            "description": "CLIProxyAPI release for managed mode. Use a pinned version for reproducible installs, or latest to track new releases.",
+            "markdownDescription": "CLIProxyAPI release for managed mode. Use a pinned version for reproducible installs, or `latest` to track new releases."
+          },
+          "universalChatProvider.server.suggestUpdates": {
+            "type": "boolean",
+            "default": true,
+            "order": 2,
+            "description": "Offer same-major updates for pinned managed server versions."
+          }
+        }
+      },
+      {
+        "type": "object",
+        "title": "Advanced",
+        "order": 3,
+        "properties": {
+          "universalChatProvider.defaultMaxOutputTokens": {
+            "type": "number",
+            "default": 16384,
+            "minimum": 1024,
+            "order": 1,
+            "description": "Fallback output-token limit when CLIProxyAPI has no model-specific value."
+          },
+          "universalChatProvider.debug": {
+            "type": "boolean",
+            "default": false,
+            "order": 2,
+            "description": "Show prompt-cache hit rate and write per-request diagnostics to extension storage."
+          }
         }
       }
-    }
+    ]
   },
   "scripts": {
     "build": "tsdown",

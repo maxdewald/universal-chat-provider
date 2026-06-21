@@ -169,6 +169,55 @@ describe('language model provider', () => {
     )
   })
 
+  it('uses stored utility effort only for core utility requests', async () => {
+    const provider = createProvider('secret')
+    await provider.updateUtilityEffort('model-a', 'high')
+    clientMocks.streamResponse.mockResolvedValue(undefined)
+    const message = [{ role: LanguageModelChatMessageRole.User, content: [new LanguageModelTextPart('hello')], name: undefined }]
+
+    await provider.provideLanguageModelChatResponse(
+      { ...model(), reasoningLevels: ['low', 'high'], reasoningEffort: 'low' },
+      message,
+      { ...options(), requestInitiator: 'core' } as ReturnType<typeof options>,
+      { report: vi.fn() },
+      new CancellationTokenSource().token,
+    )
+    await provider.provideLanguageModelChatResponse(
+      { ...model(), reasoningLevels: ['low', 'high'], reasoningEffort: 'low' },
+      message,
+      options(),
+      { report: vi.fn() },
+      new CancellationTokenSource().token,
+    )
+
+    expect(clientMocks.streamResponse.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ reasoning: { effort: 'high', summary: 'auto' } }),
+    )
+    expect(clientMocks.streamResponse.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({ reasoning: { effort: 'low', summary: 'auto' } }),
+    )
+  })
+
+  it('falls back to the lowest effort for core utility requests with stale stored effort', async () => {
+    const provider = createProvider('secret')
+    await provider.updateUtilityEffort('model-a', 'stale')
+    clientMocks.streamResponse.mockResolvedValue(undefined)
+
+    await provider.provideLanguageModelChatResponse(
+      { ...model(), reasoningLevels: ['low', 'high'], reasoningEffort: 'high' },
+      [{ role: LanguageModelChatMessageRole.User, content: [new LanguageModelTextPart('hello')], name: undefined }],
+      { ...options(), requestInitiator: 'core' } as ReturnType<typeof options>,
+      { report: vi.fn() },
+      new CancellationTokenSource().token,
+    )
+
+    expect(clientMocks.streamResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ reasoning: { effort: 'low', summary: 'auto' } }),
+      expect.any(Object),
+      expect.any(AbortSignal),
+    )
+  })
+
   it('maps HTTP errors and suppresses errors after cancellation', async () => {
     const provider = createProvider('secret')
     clientMocks.streamResponse.mockRejectedValueOnce(new ProxyHttpError('missing', 404))
@@ -344,6 +393,12 @@ function createProvider(apiKey?: string): UniversalChatProvider {
     vscodeMock.secrets.set('universalChatProvider.apiKey', apiKey)
   const context = {
     subscriptions: [],
+    globalState: {
+      get: <T>(key: string, fallback?: T): T => (vscodeMock.settings.get(key) ?? fallback) as T,
+      update: async (key: string, value: unknown) => {
+        vscodeMock.settings.set(key, value)
+      },
+    },
     secrets: {
       get: async (key: string) => vscodeMock.secrets.get(key),
       store: async (key: string, value: string) => {

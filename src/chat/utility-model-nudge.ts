@@ -1,10 +1,16 @@
 import type { ExtensionContext } from 'vscode'
-import type { UniversalChatProvider } from './provider'
+import type { ProviderModel } from './model'
 import { commands, ConfigurationTarget, extensions, window, workspace } from 'vscode'
 
 const SHOWN_KEY = 'universalChatProvider.utilityModelNudgeShown'
 const SET_COMMAND = 'universalChatProvider.setUtilityModel'
 const UCP_PREFIX = 'universal-chat-provider/'
+
+interface UtilityModelProvider {
+  getModels: (interactive: boolean) => Promise<readonly ProviderModel[]>
+  getUtilityEffort: (modelId: string) => string | undefined
+  updateUtilityEffort: (modelId: string, effort: string | undefined) => Promise<void>
+}
 
 /**
  * Decide whether to surface the one-time utility-model nudge. Kept pure so the
@@ -55,7 +61,7 @@ export async function maybeSuggestUtilityModel(context: ExtensionContext): Promi
  * so Copilot's background flows (commit messages, chat titles, summaries) run
  * through this provider instead of Copilot's own models.
  */
-export async function setUtilityModel(provider: UniversalChatProvider): Promise<void> {
+export async function setUtilityModel(provider: UtilityModelProvider): Promise<void> {
   const models = await provider.getModels(true)
   if (models.length === 0) {
     void window.showWarningMessage(
@@ -83,12 +89,50 @@ export async function setUtilityModel(provider: UniversalChatProvider): Promise<
   if (selected === undefined)
     return
 
+  const effort = await pickUtilityEffort(selected.model, provider.getUtilityEffort(selected.model.id))
+  if (effort === undefined && selected.model.reasoningLevels.length > 0)
+    return
+
   // utilitySmallModel drives the fast flows (commit messages, intent detection);
   // utilityModel drives the rest. Set both so everything routes through us.
   const value = UCP_PREFIX + selected.model.id
+  await provider.updateUtilityEffort(selected.model.id, effort)
   await chat.update('utilityModel', value, ConfigurationTarget.Global)
   await chat.update('utilitySmallModel', value, ConfigurationTarget.Global)
   void window.showInformationMessage(
-    `Copilot's commit messages, chat titles and summaries now use ${selected.model.name}.`,
+    `Copilot's commit messages, chat titles and summaries now use ${selected.model.name}${effort !== undefined ? ` (${formatEffort(effort)})` : ''}.`,
   )
+}
+
+export function lowestReasoningEffort(levels: readonly string[]): string | undefined {
+  return levels[0]
+}
+
+async function pickUtilityEffort(model: { reasoningLevels: readonly string[] }, current: string | undefined): Promise<string | undefined> {
+  if (model.reasoningLevels.length === 0)
+    return undefined
+  if (model.reasoningLevels.length === 1)
+    return model.reasoningLevels[0]
+
+  const fallback = lowestReasoningEffort(model.reasoningLevels)
+  const picked = current !== undefined && model.reasoningLevels.includes(current) ? current : fallback
+  const selected = await window.showQuickPick(
+    model.reasoningLevels.map(effort => ({
+      label: formatEffort(effort),
+      description: effort,
+      picked: effort === picked,
+      effort,
+    })),
+    {
+      title: 'Set Utility Thinking Effort',
+      placeHolder: 'Effort Copilot uses for commit messages, chat titles and summaries',
+    },
+  )
+  return selected?.effort
+}
+
+function formatEffort(value: string): string {
+  return value === 'xhigh'
+    ? 'Extra High'
+    : value.replace(/(?:^|[-_\s])\w/g, match => match.toUpperCase())
 }
