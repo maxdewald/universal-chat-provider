@@ -10,8 +10,10 @@ import { asRecord, asString } from '../shared/json'
 const ENABLED_SETTING = 'debug'
 /** Append-only debug log, kept in the extension's global storage. */
 const LOG_FILE = 'debug.jsonl'
-/** Cap each diverging item's logged content so one giant turn can't bloat the file. */
-const DIVERGED_CONTENT_CAP = 4000
+/** Cap diff-window content so giant turns don't bloat debug.jsonl. */
+const DIVERGED_CONTENT_CAP = 6000
+/** Chars of shared context kept before the first change, for orientation. */
+const DIVERGED_CONTENT_LEAD = 200
 
 export type UsageShape = 'anthropic' | 'openai' | 'unknown'
 
@@ -80,16 +82,29 @@ function crossTurnDiff(
   let stable = 0
   while (stable < prev.length && stable < cur.length && json(prev, stable) === json(cur, stable))
     stable++
-  const cap = (text: string): string =>
-    text.length > DIVERGED_CONTENT_CAP ? `${text.slice(0, DIVERGED_CONTENT_CAP)}…(+${text.length - DIVERGED_CONTENT_CAP})` : text
   const diverged: CrossTurnDiff['diverged'] = []
   for (let i = stable; i < Math.min(prev.length, cur.length); i++) {
     const before = json(prev, i)
     const after = json(cur, i)
     if (before !== after)
-      diverged.push({ index: i, before: cap(before), after: cap(after) })
+      diverged.push({ index: i, ...windowDiff(before, after) })
   }
   return { stablePrefixLen: stable, totalItems: cur.length, diverged }
+}
+
+/** Return aligned slices around the first differing char. */
+function windowDiff(before: string, after: string): { before: string, after: string } {
+  let head = 0
+  while (head < before.length && head < after.length && before[head] === after[head])
+    head++
+  const start = Math.max(0, head - DIVERGED_CONTENT_LEAD)
+  const slice = (text: string): string => {
+    const end = start + DIVERGED_CONTENT_LEAD + DIVERGED_CONTENT_CAP
+    const lead = start > 0 ? `…(+${start})` : ''
+    const tail = end < text.length ? `…(+${text.length - end})` : ''
+    return `${lead}${text.slice(start, end)}${tail}`
+  }
+  return { before: slice(before), after: slice(after) }
 }
 
 /** One-line live summary of how the request prefix moved since the last turn. */

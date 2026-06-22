@@ -193,4 +193,29 @@ describe('cacheMetricsTracker', () => {
     expect(second.crossTurn!.diverged[0]!.after).toContain('second')
     expect(first.crossTurn).toBeNull() // first turn has no predecessor
   })
+
+  it('windows a divergence on the change, not the start, so a long shared head does not hide it', async () => {
+    vscodeMock.settings.set('universalChatProvider.debug', true)
+    const metrics = tracker()
+    const head = 'x'.repeat(20_000)
+    metrics.record({ input_tokens: 1, prompt_tokens_details: { cached_tokens: 0 } }, {
+      model: 'm',
+      inputItems: [{ role: 'user', content: `${head}BEFORE_MARKER` }],
+    })
+    metrics.record({ input_tokens: 1, prompt_tokens_details: { cached_tokens: 0 } }, {
+      model: 'm',
+      inputItems: [{ role: 'user', content: `${head}AFTER_MARKER` }],
+    })
+    await metrics.flush()
+
+    const lines = (await readFile(join(directory, 'debug.jsonl'), 'utf8')).trim().split('\n')
+    const second = JSON.parse(lines[1]!) as {
+      crossTurn: { diverged: { before: string, after: string }[] }
+    }
+    const { before, after } = second.crossTurn.diverged[0]!
+    expect(before).toContain('BEFORE_MARKER')
+    expect(after).toContain('AFTER_MARKER')
+    expect(before).toMatch(/^…\(\+\d+\)/)
+    expect(before.length).toBeLessThan(head.length)
+  })
 })
