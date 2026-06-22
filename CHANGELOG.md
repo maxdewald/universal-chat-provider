@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.10.0...v0.11.0) (2026-06-22)
+
+
+### Features
+
+* preserve stream error metadata ([9d3d966](https://github.com/maxdewald/vscode-universal-chat-provider/commit/9d3d966fe5658588b6a1aee326c19d86f0e6020f))
+
 ## [0.10.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.9.0...v0.10.0) (2026-06-22)
 
 
