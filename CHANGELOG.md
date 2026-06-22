@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.9.0...v0.10.0) (2026-06-22)
+
+
+### Features
+
+* honor proxy default reasoning level, fall back to second-highest ([ffff853](https://github.com/maxdewald/vscode-universal-chat-provider/commit/ffff8538df65579c9e957d428c9316a0712990f8))
+
+
+### Bug Fixes
+
+* log cache diffs around divergence ([dc53d9b](https://github.com/maxdewald/vscode-universal-chat-provider/commit/dc53d9b3c93fc1ece5be5fbd3ce81d35ddd7393b))
+
 ## [0.9.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.8.3...v0.9.0) (2026-06-21)
 
 
