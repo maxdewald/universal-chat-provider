@@ -165,6 +165,75 @@ describe('cLIProxyClient', () => {
       .rejects
       .toThrow('empty streaming response')
   })
+
+  it('preserves nested error event metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(event({
+      type: 'error',
+      error: {
+        type: 'invalid_request_error',
+        code: 'context_length_exceeded',
+        message: 'too long',
+        param: 'input',
+      },
+    }))))
+    const { CLIProxyClient } = await import('../../src/cliproxy/client')
+
+    await expect(new CLIProxyClient('http://proxy', 'key')
+      .streamResponse({}, callbacks(), new AbortController().signal))
+      .rejects
+      .toMatchObject({
+        message: 'too long',
+        details: {
+          errorType: 'invalid_request_error',
+          code: 'context_length_exceeded',
+          param: 'input',
+        },
+      })
+  })
+
+  it('preserves response failed metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(event({
+      type: 'response.failed',
+      response: {
+        id: 'resp_1',
+        status: 'failed',
+        error: {
+          code: 'context_length_exceeded',
+          message: 'too long',
+        },
+      },
+    }))))
+    const { CLIProxyClient } = await import('../../src/cliproxy/client')
+
+    await expect(new CLIProxyClient('http://proxy', 'key')
+      .streamResponse({}, callbacks(), new AbortController().signal))
+      .rejects
+      .toMatchObject({
+        message: 'too long',
+        details: {
+          code: 'context_length_exceeded',
+          responseId: 'resp_1',
+          responseStatus: 'failed',
+        },
+      })
+  })
+
+  it('preserves top-level stream error metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(event({
+      type: 'error',
+      code: 'upstream_error',
+      message: 'upstream failed',
+    }))))
+    const { CLIProxyClient } = await import('../../src/cliproxy/client')
+
+    await expect(new CLIProxyClient('http://proxy', 'key')
+      .streamResponse({}, callbacks(), new AbortController().signal))
+      .rejects
+      .toMatchObject({
+        message: 'upstream failed',
+        details: { code: 'upstream_error' },
+      })
+  })
 })
 
 function callbacks() {

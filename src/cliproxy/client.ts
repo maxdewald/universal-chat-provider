@@ -2,9 +2,10 @@ import type {
   ProxyModelListEntry,
   ProxyModelMetadata,
 } from '../chat/model'
+import type { ProxyStreamErrorDetails } from './errors'
 import { isPlainObject } from 'moderndash'
 import { asRecord, asString } from '../shared/json'
-import { ProxyHttpError } from './errors'
+import { ProxyHttpError, ProxyStreamError } from './errors'
 import { parseServerSentEvents } from './sse'
 
 export interface DiscoveryResult {
@@ -120,8 +121,7 @@ export class CLIProxyClient {
         callbacks.onUsage?.(asRecord(payload.response)?.usage)
       }
       else if (type === 'response.failed' || type === 'error') {
-        const error = asRecord(payload.error) ?? asRecord(asRecord(payload.response)?.error)
-        throw new Error(asString(error?.message) ?? 'CLIProxyAPI response failed.')
+        throw streamError(payload)
       }
     }
   }
@@ -183,6 +183,33 @@ function emitToolCall(
     }
   }
   callbacks.onToolCall(call.callId, call.name, input)
+}
+
+function streamError(payload: Record<string, unknown>): ProxyStreamError {
+  const response = asRecord(payload.response)
+  const error = asRecord(payload.error) ?? asRecord(response?.error)
+  const details: ProxyStreamErrorDetails = {}
+  const errorType = asString(error?.type)
+  const code = asString(error?.code) ?? asString(payload.code)
+  const param = asString(error?.param)
+  const responseId = asString(response?.id)
+  const responseStatus = asString(response?.status)
+
+  if (errorType !== undefined)
+    details.errorType = errorType
+  if (code !== undefined)
+    details.code = code
+  if (param !== undefined)
+    details.param = param
+  if (responseId !== undefined)
+    details.responseId = responseId
+  if (responseStatus !== undefined)
+    details.responseStatus = responseStatus
+
+  return new ProxyStreamError(
+    asString(error?.message) ?? asString(payload.message) ?? 'CLIProxyAPI response failed.',
+    details,
+  )
 }
 
 function toolKey(payload: Record<string, unknown>, item?: Record<string, unknown>): string {
