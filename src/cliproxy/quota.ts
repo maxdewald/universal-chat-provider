@@ -5,17 +5,22 @@ import { errorMessage } from '../shared/errors'
 export interface QuotaWindow {
   label: string
   remainingPercent?: number
+  key?: string // claude: window id; remainingForModel scopes family caps by it
 }
 
 export interface QuotaReport {
-  provider: 'codex' | 'antigravity'
-  windows: QuotaWindow[] // codex: 5h / 7d account-level windows
+  provider: 'codex' | 'antigravity' | 'claude'
+  windows: QuotaWindow[] // codex/claude: account-level windows (5h / 7d / …)
   models?: Record<string, number> // antigravity: remaining percent keyed by proxy model id
   error?: string
 }
 
 const WHAM_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage'
 const ANTIGRAVITY_MODELS_URL = 'https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels'
+const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+// Claude weekly caps are keyed "seven_day_<family>" (e.g. seven_day_opus); the family binds the
+// window to its model family by name, so a new one like seven_day_fable works without code changes.
+const SEVEN_DAY_FAMILY = /^seven_day_(.+)$/
 
 export async function fetchQuotas(client: ManagementClient, signal?: AbortSignal): Promise<QuotaReport[]> {
   const files = await client.listAuthFilesRaw(signal)
@@ -25,6 +30,8 @@ export async function fetchQuotas(client: ManagementClient, signal?: AbortSignal
       return [fetchCodexQuota(client, entry, signal)]
     if (provider === 'antigravity')
       return [fetchAntigravityQuota(client, entry, signal)]
+    if (provider === 'claude')
+      return [fetchClaudeQuota(client, entry, signal)]
     return []
   })
   return Promise.all(tasks)
@@ -45,6 +52,19 @@ export function remainingForModel(reports: QuotaReport[], model: { proxyOwner: s
   if (owner === 'openai') {
     const report = reports.find(r => r.provider === 'codex' && r.error === undefined)
     const percents = (report?.windows ?? []).map(w => w.remainingPercent).filter((p): p is number => p !== undefined)
+    return percents.length > 0 ? Math.min(...percents) : undefined
+  }
+  if (owner === 'anthropic') {
+    const report = reports.find(r => r.provider === 'claude' && r.error === undefined)
+    const id = model.proxyModelId.toLowerCase()
+    // 5h/7d windows gate every model; a family cap (seven_day_opus) only gates its own family.
+    const applicable = (report?.windows ?? []).filter((w) => {
+      if (w.key === 'extra_usage')
+        return false
+      const family = SEVEN_DAY_FAMILY.exec(w.key ?? '')?.[1]
+      return family === undefined || id.includes(family)
+    })
+    const percents = applicable.map(w => w.remainingPercent).filter((p): p is number => p !== undefined)
     return percents.length > 0 ? Math.min(...percents) : undefined
   }
   return undefined
@@ -103,6 +123,59 @@ async function fetchAntigravityQuota(client: ManagementClient, entry: Record<str
   catch (error) {
     return { ...report, error: errorMessage(error) }
   }
+}
+
+async function fetchClaudeQuota(client: ManagementClient, entry: Record<string, unknown>, signal?: AbortSignal): Promise<QuotaReport> {
+  const report: QuotaReport = { provider: 'claude', windows: [] }
+  const authIndex = str(entry.auth_index)
+  if (authIndex === '')
+    return { ...report, error: 'missing auth_index' }
+  try {
+    const { statusCode, body } = await client.apiCall({
+      auth_index: authIndex,
+      method: 'GET',
+      url: CLAUDE_USAGE_URL,
+      header: { 'Authorization': 'Bearer $TOKEN$', 'Accept': 'application/json', 'anthropic-beta': 'oauth-2025-04-20' },
+    }, signal)
+    if (statusCode < 200 || statusCode >= 300)
+      return { ...report, error: `HTTP ${statusCode}` }
+    const data = parseBody(body)
+    if (data === undefined)
+      return { ...report, error: 'invalid quota payload' }
+    report.windows = parseClaudeWindows(data)
+    return report
+  }
+  catch (error) {
+    return { ...report, error: errorMessage(error) }
+  }
+}
+
+// Account-level utilization (percent used) per window, plus optional extra-usage credits.
+function parseClaudeWindows(data: Record<string, unknown>): QuotaWindow[] {
+  const windows: QuotaWindow[] = []
+  for (const [key, raw] of Object.entries(data)) {
+    if (!isPlainObject(raw))
+      continue
+    const label = claudeWindowLabel(key)
+    if (label === undefined)
+      continue
+    const used = num(raw.utilization)
+    windows.push({ key, label, ...(used === undefined ? {} : { remainingPercent: clamp(100 - used, 0, 100) }) })
+  }
+  const extra = isPlainObject(data.extra_usage) ? data.extra_usage : undefined
+  const extraUsed = num(extra?.utilization)
+  if (extra?.is_enabled === true && extraUsed !== undefined)
+    windows.push({ key: 'extra_usage', label: 'Extra Usage', remainingPercent: clamp(100 - extraUsed, 0, 100) })
+  return windows
+}
+
+function claudeWindowLabel(key: string): string | undefined {
+  if (key === 'five_hour')
+    return '5h Quota'
+  if (key === 'seven_day')
+    return '7d Quota'
+  const family = SEVEN_DAY_FAMILY.exec(key)?.[1]
+  return family === undefined ? undefined : `7d ${family.charAt(0).toUpperCase()}${family.slice(1)}`
 }
 
 function parseCodexWindows(data: Record<string, unknown>): QuotaWindow[] {

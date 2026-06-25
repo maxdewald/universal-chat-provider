@@ -7,18 +7,15 @@ beforeEach(() => {
 
 describe('management client', () => {
   it('requests an auth URL with the management bearer key', async () => {
-    const fetchMock = vi.fn(async () => Response.json({ status: 'ok', url: 'https://login' }))
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>(async () => Response.json({ status: 'ok', url: 'https://login' }))
     vi.stubGlobal('fetch', fetchMock)
     const client = new ManagementClient('http://127.0.0.1:8317', 'mgmt-key')
 
     await expect(client.requestAuthUrl('codex-auth-url')).resolves.toBe('https://login')
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8317/v0/management/codex-auth-url?is_webui=true',
-      expect.objectContaining({
-        method: 'GET',
-        headers: { Authorization: 'Bearer mgmt-key' },
-      }),
-    )
+    const request = fetchMock.mock.calls[0]![0]
+    expect(request.url).toBe('http://127.0.0.1:8317/v0/management/codex-auth-url?is_webui=true')
+    expect(request.method).toBe('GET')
+    expect(request.headers.get('authorization')).toBe('Bearer mgmt-key')
   })
 
   it('lists auth files defensively and skips malformed entries', async () => {
@@ -34,15 +31,14 @@ describe('management client', () => {
   })
 
   it('encodes the account name when deleting', async () => {
-    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>(async () => new Response(null, { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const client = new ManagementClient('http://127.0.0.1:8317', 'mgmt-key')
 
     await client.deleteAuthFile('my account.json')
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8317/v0/management/auth-files?name=my%20account.json',
-      expect.objectContaining({ method: 'DELETE' }),
-    )
+    const request = fetchMock.mock.calls[0]![0]
+    expect(request.url).toBe('http://127.0.0.1:8317/v0/management/auth-files?name=my%20account.json')
+    expect(request.method).toBe('DELETE')
   })
 
   it('surfaces management errors with their status and message', async () => {

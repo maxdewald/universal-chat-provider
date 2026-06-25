@@ -4,7 +4,7 @@ import { access, chmod, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
 import { arch as osArch, platform as osPlatform } from 'node:os'
 import { dirname, join } from 'node:path'
 import { unzipSync } from 'fflate'
-import { retry } from 'moderndash'
+import ky from 'ky'
 import { parseTarGzip } from 'nanotar'
 import semver from 'semver'
 
@@ -46,30 +46,19 @@ export function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, '')
 }
 
-export async function fetchOk(url: string, signal?: AbortSignal): Promise<Response> {
-  const response = await fetch(url, {
-    headers: { 'User-Agent': 'universal-chat-provider-vscode' },
-    ...(signal ? { signal } : {}),
-  })
-  if (!response.ok)
-    throw new Error(`Request to ${url} failed with HTTP ${response.status}.`)
-  return response
-}
-
-const DOWNLOAD_RETRIES = 3
-
-export async function fetchWithRetry(url: string, signal?: AbortSignal): Promise<Response> {
-  return retry(async () => fetchOk(url, signal), {
-    maxRetries: DOWNLOAD_RETRIES,
-    backoff: attempt => (signal?.aborted ? 0 : attempt * 500),
-  })
-}
+// ky retries transient failures (5xx/429/network) and honors Retry-After on rate limits.
+export const fetcher = ky.create({
+  headers: { 'User-Agent': 'universal-chat-provider-vscode' },
+  retry: { limit: 3 },
+  timeout: false,
+})
 
 export async function resolveVersion(requested: string, signal?: AbortSignal): Promise<string> {
   if (requested.toLowerCase() !== 'latest')
     return normalizeVersion(requested)
-  const response = await fetchWithRetry(`https://api.github.com/repos/${REPO}/releases/latest`, signal)
-  const payload = await response.json() as { tag_name?: string }
+  const payload = await fetcher
+    .get(`https://api.github.com/repos/${REPO}/releases/latest`, { signal: signal ?? null })
+    .json<{ tag_name?: string }>()
   if (typeof payload.tag_name !== 'string' || payload.tag_name.length === 0)
     throw new Error('Could not determine the latest CLIProxyAPI release.')
   return normalizeVersion(payload.tag_name)
@@ -100,9 +89,10 @@ export async function acquireBinary(options: AcquireOptions): Promise<AcquireRes
 
   options.output.appendLine(`Downloading CLIProxyAPI ${version} (${asset.assetName})...`)
   const base = `https://github.com/${REPO}/releases/download/v${version}`
+  const signal = options.signal ?? null
   const [archiveResponse, checksumResponse] = await Promise.all([
-    fetchWithRetry(`${base}/${asset.assetName}`, options.signal),
-    fetchWithRetry(`${base}/checksums.txt`, options.signal),
+    fetcher.get(`${base}/${asset.assetName}`, { signal }),
+    fetcher.get(`${base}/checksums.txt`, { signal }),
   ])
   const archive = new Uint8Array(await archiveResponse.arrayBuffer())
   const expected = parseChecksums(await checksumResponse.text()).get(asset.assetName)

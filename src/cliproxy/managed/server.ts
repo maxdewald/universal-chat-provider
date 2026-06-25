@@ -6,6 +6,7 @@ import { closeSync, openSync, rmSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import process from 'node:process'
 import getPort from 'get-port'
+import ky from 'ky'
 import { sleep } from 'moderndash'
 import { acquireBinary, readInstalledVersion } from './binary'
 import { DEFAULT_PORT, setConfigPort } from './config'
@@ -165,10 +166,12 @@ export class ManagedServer {
 }
 
 async function isHealthy(host: string, port: number, signal?: AbortSignal): Promise<boolean> {
-  const deadline = AbortSignal.timeout(HEALTH_TIMEOUT_MS)
   try {
-    const response = await fetch(`http://${host}:${port}/healthz`, {
-      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+    const response = await ky.get(`http://${host}:${port}/healthz`, {
+      timeout: HEALTH_TIMEOUT_MS,
+      retry: 0,
+      throwHttpErrors: false,
+      signal: signal ?? null,
     })
     return response.ok
   }

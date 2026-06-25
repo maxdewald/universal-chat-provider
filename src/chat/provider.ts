@@ -89,6 +89,10 @@ export class UniversalChatProvider implements LanguageModelChatProvider<Provider
     if (codex !== undefined && codex.windows.length > 0)
       sections.push({ title: 'Codex', entries: codex.windows.map(window => ({ name: window.label, remainingPercent: window.remainingPercent })) })
 
+    const claude = this.quotaReports.find(report => report.provider === 'claude' && report.error === undefined)
+    if (claude !== undefined && claude.windows.length > 0)
+      sections.push({ title: 'Claude', entries: claude.windows.map(window => ({ name: window.label, remainingPercent: window.remainingPercent })) })
+
     const antigravity = this.quotaReports.find(report => report.provider === 'antigravity' && report.error === undefined)
     const models = antigravity?.models
     if (models !== undefined) {

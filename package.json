@@ -233,6 +233,7 @@
     "eventsource-parser": "^3.1.0",
     "fflate": "^0.8.3",
     "get-port": "^7.2.0",
+    "ky": "^2.0.2",
     "moderndash": "^4.0.2",
     "nanotar": "^0.3.0",
     "semver": "^7.8.4",

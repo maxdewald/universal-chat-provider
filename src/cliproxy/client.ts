@@ -1,8 +1,10 @@
+import type { BeforeErrorHook, KyInstance } from 'ky'
 import type {
   ProxyModelListEntry,
   ProxyModelMetadata,
 } from '../chat/model'
 import type { ProxyStreamErrorDetails } from './errors'
+import ky, { isHTTPError } from 'ky'
 import { isPlainObject } from 'moderndash'
 import { asRecord, asString } from '../shared/json'
 import { ProxyHttpError, ProxyStreamError } from './errors'
@@ -26,19 +28,39 @@ interface PendingToolCall {
   arguments: string
 }
 
+const toProxyHttpError: BeforeErrorHook = ({ error }) => {
+  if (!isHTTPError(error))
+    return error
+  const body = error.data
+  const message = isPlainObject(body)
+    ? asString(body.error) ?? asString(asRecord(body.error)?.message)
+    : typeof body === 'string' && body.trim() ? body.trim() : undefined
+  return new ProxyHttpError(
+    message ?? `CLIProxyAPI request failed with HTTP ${error.response.status}.`,
+    error.response.status,
+    body,
+  )
+}
+
 export class CLIProxyClient {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly apiKey: string,
-  ) {}
+  private readonly fetcher: KyInstance
+
+  constructor(baseUrl: string, apiKey: string) {
+    // ponytail: retry:0/timeout:false keep the old raw-fetch behavior (streaming must
+    // not time out); ky folds away the auth header, base url, and !ok error parsing.
+    this.fetcher = ky.create({
+      prefix: baseUrl,
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      retry: 0,
+      timeout: false,
+      hooks: { beforeError: [toProxyHttpError] },
+    })
+  }
 
   async discover(signal?: AbortSignal): Promise<DiscoveryResult> {
     const [available, metadata] = await Promise.all([
-      this.getJson<{ data?: ProxyModelListEntry[] }>('/v1/models', signal)
-        .then(payload => payload.data ?? []),
-      this.getJson<{ models?: ProxyModelMetadata[] }>('/v1/models?client_version=0.114.0', signal)
-        .then(payload => payload.models ?? [])
-        .catch(() => []),
+      this.fetcher.get('/v1/models', { signal: signal ?? null }).json<{ data?: ProxyModelListEntry[] }>().then(payload => payload.data ?? []),
+      this.fetcher.get('/v1/models?client_version=0.114.0', { signal: signal ?? null }).json<{ models?: ProxyModelMetadata[] }>().then(payload => payload.models ?? []).catch(() => []),
     ])
     return { available, metadata }
   }
@@ -48,14 +70,15 @@ export class CLIProxyClient {
     callbacks: StreamCallbacks,
     signal: AbortSignal,
   ): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/v1/responses`, {
-      method: 'POST',
-      headers: this.headers(body),
-      body: JSON.stringify(body),
+    const promptCacheKey = asString(body.prompt_cache_key)
+    const sessionHeader = promptCacheKey !== undefined && promptCacheKey.length > 0
+      ? { Session_id: promptCacheKey }
+      : {}
+    const response = await this.fetcher.post('/v1/responses', {
+      json: body,
+      headers: sessionHeader,
       signal,
     })
-    if (!response.ok)
-      throw await responseError(response)
     if (!response.body)
       throw new Error('CLIProxyAPI returned an empty streaming response.')
 
@@ -125,43 +148,6 @@ export class CLIProxyClient {
       }
     }
   }
-
-  private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      headers: this.headers(),
-      ...(signal ? { signal } : {}),
-    })
-    if (!response.ok)
-      throw await responseError(response)
-    return await response.json() as T
-  }
-
-  private headers(body?: Record<string, unknown>): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.apiKey}`,
-      'Content-Type': 'application/json',
-    }
-
-    const promptCacheKey = asString(body?.prompt_cache_key)
-    if (promptCacheKey !== undefined && promptCacheKey.length > 0) {
-      headers.Session_id = promptCacheKey
-    }
-
-    return headers
-  }
-}
-
-async function responseError(response: Response): Promise<ProxyHttpError> {
-  const text = await response.text().catch(() => '')
-  let body: unknown = text
-  try {
-    body = JSON.parse(text) as unknown
-  }
-  catch {}
-  const message = isPlainObject(body)
-    ? asString(body.error) ?? asString(asRecord(body.error)?.message)
-    : typeof body === 'string' && body.trim() ? body.trim() : undefined
-  return new ProxyHttpError(message ?? `CLIProxyAPI request failed with HTTP ${response.status}.`, response.status, body)
 }
 
 function emitToolCall(

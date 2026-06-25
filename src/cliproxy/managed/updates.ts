@@ -1,5 +1,5 @@
 import semver from 'semver'
-import { fetchWithRetry, normalizeVersion, REPO } from './binary'
+import { fetcher, normalizeVersion, REPO } from './binary'
 
 export function pickSuggestedUpdate(installed: string, available: readonly string[]): string | null {
   const current = semver.valid(normalizeVersion(installed))
@@ -17,8 +17,9 @@ interface ReleaseEntry {
 }
 
 export async function listReleaseVersions(signal?: AbortSignal): Promise<string[]> {
-  const response = await fetchWithRetry(`https://api.github.com/repos/${REPO}/releases?per_page=100`, signal)
-  const payload = await response.json() as ReleaseEntry[]
+  const payload = await fetcher
+    .get(`https://api.github.com/repos/${REPO}/releases?per_page=100`, { signal: signal ?? null })
+    .json<ReleaseEntry[]>()
   return payload
     .filter(release => release.draft !== true && release.prerelease !== true && typeof release.tag_name === 'string')
     .map(release => normalizeVersion(release.tag_name!))

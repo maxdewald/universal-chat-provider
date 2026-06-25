@@ -1,3 +1,5 @@
+import type { BeforeErrorHook, KyInstance } from 'ky'
+import ky, { isHTTPError } from 'ky'
 import { isPlainObject } from 'moderndash'
 
 export interface LoginProvider {
@@ -30,83 +32,63 @@ export class ManagementError extends Error {
   }
 }
 
+const toManagementError: BeforeErrorHook = ({ error }) => {
+  if (!isHTTPError(error))
+    return error
+  return new ManagementError(
+    managementErrorMessage(error.data) ?? `Management request failed with HTTP ${error.response.status}.`,
+    error.response.status,
+  )
+}
+
 export class ManagementClient {
-  constructor(
-    private readonly baseUrl: string,
-    private readonly key: string,
-  ) {}
+  private readonly fetcher: KyInstance
+
+  constructor(baseUrl: string, key: string) {
+    // ponytail: retry:0/timeout:false preserve the old raw-fetch behavior; ky just folds
+    // away the bearer header, base path, and !ok error parsing (the beforeError hook).
+    this.fetcher = ky.create({
+      prefix: `${baseUrl}/v0/management`,
+      headers: { Authorization: `Bearer ${key}` },
+      retry: 0,
+      timeout: false,
+      hooks: { beforeError: [toManagementError] },
+    })
+  }
 
   async requestAuthUrl(endpoint: string, signal?: AbortSignal): Promise<string> {
-    const payload = await this.getJson<{ url?: unknown }>(`/${endpoint}?is_webui=true`, signal)
+    const payload = await this.fetcher.get(`/${endpoint}?is_webui=true`, { signal: signal ?? null }).json<{ url?: unknown }>()
     if (typeof payload.url !== 'string')
       throw new ManagementError('CLIProxyAPI returned an invalid auth URL response.', 502)
     return payload.url
   }
 
   async listAuthFiles(signal?: AbortSignal): Promise<AuthFile[]> {
-    const payload = await this.getJson<{ files?: unknown }>('/auth-files', signal)
-    if (!Array.isArray(payload.files))
-      return []
-    return payload.files
-      .filter(isPlainObject)
+    return (await this.listAuthFilesRaw(signal))
       .filter((file): file is { name: string, type?: string } => typeof file.name === 'string')
       .map(file => (typeof file.type === 'string' ? { name: file.name, type: file.type } : { name: file.name }))
   }
 
   async deleteAuthFile(name: string, signal?: AbortSignal): Promise<void> {
-    await this.send('DELETE', `/auth-files?name=${encodeURIComponent(name)}`, undefined, signal)
+    await this.fetcher.delete(`/auth-files?name=${encodeURIComponent(name)}`, { signal: signal ?? null })
   }
 
   async listAuthFilesRaw(signal?: AbortSignal): Promise<Record<string, unknown>[]> {
-    const payload = await this.getJson<{ files?: unknown }>('/auth-files', signal)
+    const payload = await this.fetcher.get('/auth-files', { signal: signal ?? null }).json<{ files?: unknown }>()
     return Array.isArray(payload.files) ? payload.files.filter(isPlainObject) : []
   }
 
   // Proxies an upstream request through CLIProxyAPI using a stored credential.
   // CPA substitutes the literal "$TOKEN$" in headers with the account's token.
   async apiCall(payload: Record<string, unknown>, signal?: AbortSignal): Promise<{ statusCode: number, body: unknown }> {
-    const response = await this.send('POST', '/api-call', payload, signal)
-    const json = await response.json() as { status_code?: number, statusCode?: number, body?: unknown }
+    const json = await this.fetcher.post('/api-call', { json: payload, signal: signal ?? null })
+      .json<{ status_code?: number, statusCode?: number, body?: unknown }>()
     return { statusCode: json.status_code ?? json.statusCode ?? 0, body: json.body }
-  }
-
-  private async getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-    const response = await this.send('GET', path, undefined, signal)
-    return await response.json() as T
-  }
-
-  private async send(
-    method: string,
-    path: string,
-    body?: Record<string, unknown>,
-    signal?: AbortSignal,
-  ): Promise<Response> {
-    const response = await fetch(`${this.baseUrl}/v0/management${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.key}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-      ...(signal ? { signal } : {}),
-    })
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      throw new ManagementError(
-        managementErrorMessage(text) ?? `Management request failed with HTTP ${response.status}.`,
-        response.status,
-      )
-    }
-    return response
   }
 }
 
-function managementErrorMessage(text: string): string | undefined {
-  try {
-    const body: unknown = JSON.parse(text)
-    if (isPlainObject(body) && typeof body.error === 'string')
-      return body.error
-  }
-  catch {}
-  return text.trim() ? text.trim() : undefined
+function managementErrorMessage(data: unknown): string | undefined {
+  if (isPlainObject(data) && typeof data.error === 'string')
+    return data.error
+  return typeof data === 'string' && data.trim() ? data.trim() : undefined
 }

@@ -30,11 +30,21 @@ const ANTIGRAVITY_BODY = JSON.stringify({
   },
 })
 
+const CLAUDE_BODY = JSON.stringify({
+  five_hour: { utilization: 20, resets_at: '2026-06-25T12:00:00Z' },
+  seven_day: { utilization: 5, resets_at: '2026-07-01T00:00:00Z' },
+  seven_day_sonnet: { utilization: 60, resets_at: '2026-07-01T00:00:00Z' },
+  seven_day_opus: { utilization: 90, resets_at: '2026-07-01T00:00:00Z' },
+  extra_usage: { is_enabled: true, utilization: 25, used_credits: 5, monthly_limit: 20 },
+})
+
 function respondOk(url: string): ApiCallResult {
   if (url.includes('wham/usage'))
     return { statusCode: 200, body: CODEX_BODY }
   if (url.includes('fetchAvailableModels'))
     return { statusCode: 200, body: ANTIGRAVITY_BODY }
+  if (url.includes('oauth/usage'))
+    return { statusCode: 200, body: CLAUDE_BODY }
   return { statusCode: 404, body: '' }
 }
 
@@ -62,8 +72,23 @@ describe('fetchQuotas', () => {
     })
   })
 
+  it('parses claude account windows and enabled extra usage', async () => {
+    const { client } = fakeClient([{ name: 'claude.json', type: 'claude', auth_index: 'x1' }], respondOk)
+
+    const report = (await fetchQuotas(client))[0]!
+
+    expect(report.provider).toBe('claude')
+    expect(report.windows).toEqual([
+      { key: 'five_hour', label: '5h Quota', remainingPercent: 80 },
+      { key: 'seven_day', label: '7d Quota', remainingPercent: 95 },
+      { key: 'seven_day_sonnet', label: '7d Sonnet', remainingPercent: 40 },
+      { key: 'seven_day_opus', label: '7d Opus', remainingPercent: 10 },
+      { key: 'extra_usage', label: 'Extra Usage', remainingPercent: 75 },
+    ])
+  })
+
   it('skips providers without a known quota endpoint', async () => {
-    const { client, apiCall } = fakeClient([{ name: 'claude.json', type: 'claude', auth_index: 'x1' }], respondOk)
+    const { client, apiCall } = fakeClient([{ name: 'kimi.json', type: 'kimi', auth_index: 'x1' }], respondOk)
 
     await expect(fetchQuotas(client)).resolves.toEqual([])
     expect(apiCall).not.toHaveBeenCalled()
@@ -92,6 +117,13 @@ describe('remainingForModel', () => {
   const reports: QuotaReport[] = [
     { provider: 'codex', windows: [{ label: '5h Quota', remainingPercent: 80 }, { label: '7d Quota', remainingPercent: 8 }] },
     { provider: 'antigravity', windows: [], models: { 'gemini-pro-agent': 35 } },
+    { provider: 'claude', windows: [
+      { key: 'five_hour', label: '5h Quota', remainingPercent: 80 },
+      { key: 'seven_day', label: '7d Quota', remainingPercent: 50 },
+      { key: 'seven_day_sonnet', label: '7d Sonnet', remainingPercent: 40 },
+      { key: 'seven_day_opus', label: '7d Opus', remainingPercent: 10 },
+      { key: 'extra_usage', label: 'Extra Usage', remainingPercent: 5 },
+    ] },
   ]
 
   it('returns the antigravity per-model percent', () => {
@@ -102,9 +134,26 @@ describe('remainingForModel', () => {
     expect(remainingForModel(reports, { proxyOwner: 'openai', proxyModelId: 'gpt-5-codex' })).toBe(8)
   })
 
+  it('binds an unknown weekly family by name without code changes', () => {
+    const withFable: QuotaReport[] = [{ provider: 'claude', windows: [
+      { key: 'seven_day', label: '7d Quota', remainingPercent: 70 },
+      { key: 'seven_day_fable', label: '7d Fable', remainingPercent: 15 },
+    ] }]
+    expect(remainingForModel(withFable, { proxyOwner: 'anthropic', proxyModelId: 'claude-fable-5' })).toBe(15)
+    expect(remainingForModel(withFable, { proxyOwner: 'anthropic', proxyModelId: 'claude-opus-4-6' })).toBe(70)
+  })
+
+  it('scopes claude weekly caps to the model family, ignoring extra usage', () => {
+    // Opus sees its own 10% weekly cap; Sonnet sees 40%; both gated by the shared 5h/7d windows.
+    expect(remainingForModel(reports, { proxyOwner: 'anthropic', proxyModelId: 'claude-opus-4-6' })).toBe(10)
+    expect(remainingForModel(reports, { proxyOwner: 'anthropic', proxyModelId: 'claude-sonnet-4-6' })).toBe(40)
+    // Haiku has no family cap, so the shared 7d window (50%) is the tightest.
+    expect(remainingForModel(reports, { proxyOwner: 'anthropic', proxyModelId: 'claude-haiku-4-5' })).toBe(50)
+  })
+
   it('is undefined for an untracked antigravity model, owner, or errored report', () => {
     expect(remainingForModel(reports, { proxyOwner: 'antigravity', proxyModelId: 'unknown' })).toBeUndefined()
-    expect(remainingForModel(reports, { proxyOwner: 'anthropic', proxyModelId: 'claude' })).toBeUndefined()
+    expect(remainingForModel(reports, { proxyOwner: 'kimi', proxyModelId: 'k2' })).toBeUndefined()
     const errored: QuotaReport[] = [{ provider: 'codex', windows: [], error: 'HTTP 401' }]
     expect(remainingForModel(errored, { proxyOwner: 'openai', proxyModelId: 'gpt-5-codex' })).toBeUndefined()
   })

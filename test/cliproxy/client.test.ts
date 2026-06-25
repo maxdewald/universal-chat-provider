@@ -6,12 +6,12 @@ beforeEach(() => {
 
 describe('cLIProxyClient', () => {
   it('discovers models and tolerates optional metadata failure', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === 'http://proxy/v1/models')
+    const fetchMock = vi.fn(async (request: Request) => {
+      if (request.url === 'http://proxy/v1/models')
         return Response.json({ data: [{ id: 'model-a' }] })
-      if (url.includes('client_version'))
+      if (request.url.includes('client_version'))
         return new Response('optional unavailable', { status: 503 })
-      throw new Error(`Unexpected URL ${url} ${JSON.stringify(init)}`)
+      throw new Error(`Unexpected URL ${request.url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
     const { CLIProxyClient } = await import('../../src/cliproxy/client')
@@ -21,17 +21,15 @@ describe('cLIProxyClient', () => {
 
     expect(result.available).toEqual([{ id: 'model-a' }])
     expect(result.metadata).toEqual([])
-    expect(fetchMock).toHaveBeenCalledWith('http://proxy/v1/models', {
-      headers: {
-        'Authorization': 'Bearer secret',
-        'Content-Type': 'application/json',
-      },
-    })
+    const modelsRequest = fetchMock.mock.calls.find(([request]) => request.url === 'http://proxy/v1/models')?.[0]
+    expect(modelsRequest?.method).toBe('GET')
+    expect(modelsRequest?.headers.get('authorization')).toBe('Bearer secret')
+    expect(modelsRequest?.headers.get('content-type')).toBe('application/json')
   })
 
   it('reports JSON and plain-text HTTP errors without losing the body', async () => {
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url.includes('client_version'))
+    const fetchMock = vi.fn(async (request: Request) => {
+      if (request.url.includes('client_version'))
         return Response.json({ models: [] })
       return Response.json({ error: { message: 'bad key' } }, { status: 401 })
     })
@@ -75,7 +73,7 @@ describe('cLIProxyClient', () => {
         item: { type: 'function_call', call_id: 'ignored', name: 'late', arguments: '{}' },
       }),
     ].join('')
-    const fetchMock = vi.fn().mockResolvedValue(new Response(events, {
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>().mockResolvedValue(new Response(events, {
       headers: { 'content-type': 'text/event-stream' },
     }))
     vi.stubGlobal('fetch', fetchMock)
@@ -85,15 +83,11 @@ describe('cLIProxyClient', () => {
 
     await new CLIProxyClient('http://proxy', 'key').streamResponse({ model: 'x' }, handlers, signal)
 
-    expect(fetchMock).toHaveBeenCalledWith('http://proxy/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer key',
-        'Content-Type': 'application/json',
-      },
-      body: '{"model":"x"}',
-      signal,
-    })
+    const request = fetchMock.mock.calls[0]![0]
+    expect(request.url).toBe('http://proxy/v1/responses')
+    expect(request.method).toBe('POST')
+    expect(request.headers.get('authorization')).toBe('Bearer key')
+    expect(request.headers.get('content-type')).toBe('application/json')
     expect(handlers.onText).toHaveBeenCalledWith('hello')
     expect(handlers.onThinking).toHaveBeenCalledWith('think')
     expect(handlers.onToolCall).toHaveBeenCalledTimes(1)
@@ -102,7 +96,7 @@ describe('cLIProxyClient', () => {
   })
 
   it('forwards prompt cache keys as CLIProxyAPI session hints', async () => {
-    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>()
+    const fetchMock = vi.fn<(request: Request) => Promise<Response>>()
       .mockResolvedValue(new Response(event({ type: 'response.completed' })))
     vi.stubGlobal('fetch', fetchMock)
     const { CLIProxyClient } = await import('../../src/cliproxy/client')
@@ -113,13 +107,10 @@ describe('cLIProxyClient', () => {
       new AbortController().signal,
     )
 
-    const init = fetchMock.mock.calls[0]?.[1]
-    const headers = init?.headers as Record<string, string>
-    expect(headers).toEqual({
-      'Authorization': 'Bearer key',
-      'Content-Type': 'application/json',
-      'Session_id': 'universal-chat-provider-cache-key',
-    })
+    const { headers } = fetchMock.mock.calls[0]![0]
+    expect(headers.get('authorization')).toBe('Bearer key')
+    expect(headers.get('content-type')).toBe('application/json')
+    expect(headers.get('session_id')).toBe('universal-chat-provider-cache-key')
   })
 
   it('emits completed pending calls and preserves invalid or scalar arguments', async () => {
