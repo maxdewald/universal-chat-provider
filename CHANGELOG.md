@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.12.0...v0.13.0) (2026-06-25)
+
+
+### Features
+
+* add low quota warning to status bar ([2f404a2](https://github.com/maxdewald/vscode-universal-chat-provider/commit/2f404a26234014894e328f42ccd9a082340e395b))
+* show quota details in status bar tooltip ([d86d3ba](https://github.com/maxdewald/vscode-universal-chat-provider/commit/d86d3bac63aa99cfea8b81fce0485983067ea996))
+
 ## [0.12.0](https://github.com/maxdewald/vscode-universal-chat-provider/compare/v0.11.0...v0.12.0) (2026-06-24)
 
 
